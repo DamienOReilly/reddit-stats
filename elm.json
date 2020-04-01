@@ -17,6 +17,7 @@
             "elm/time": "1.0.0",
             "elm-community/basics-extra": "4.1.0",
             "elm-community/dict-extra": "2.4.0",
+            "elm-community/list-extra": "8.2.3",
             "indicatrix/elm-chartjs-webcomponent": "1.0.0"
         },
         "indirect": {

@@ -5,7 +5,7 @@ import Chartjs.Chart as Chart
 import Chartjs.Common as ChartCommon
 import Chartjs.Data as ChartData
 import Chartjs.DataSets.Bar as BarData
-import Color
+import Color exposing (darkBlue, darkBrown, darkGreen, darkOrange, darkPurple, darkRed, darkYellow, lightBlue, lightBrown, lightGreen, lightOrange, lightPurple, lightRed, lightYellow)
 import Debug exposing (todo)
 import Dict
 import Dict.Extra exposing (groupBy)
@@ -15,6 +15,7 @@ import Html.Events exposing (onClick, onInput)
 import Http
 import Json.Decode as JD exposing (Decoder, field, int, map, map2, string)
 import List exposing (length, map)
+import List.Extra
 import Pure
 import Task exposing (Task)
 import Time exposing (millisToPosix, toYear, utc)
@@ -63,8 +64,16 @@ type Model
     | Success (List PushShiftData)
 
 
-type BarChartData
-    = BarChartData String (List String) (List Float)
+type ChartData
+    = ChartData String (List String) (List Float)
+
+
+backgroundColors =
+    [ lightRed, lightOrange, lightYellow, lightGreen, lightBlue, lightPurple, lightBrown ]
+
+
+borderColors =
+    [ darkRed, darkOrange, darkYellow, darkGreen, darkBlue, darkPurple, darkBrown ]
 
 
 init : () -> ( Model, Cmd Msg )
@@ -95,65 +104,6 @@ subscriptions _ =
     Sub.none
 
 
-
--- view : Model -> Html Msg
--- view model =
---     case model of
---         TargetUser (User user) ->
---             div [ Html.Attributes.class Pure.grid ]
---                 [ input [ placeholder "User to search for.", value user, onInput <| ChangeInput << (\u -> User u) ] []
---                 , button [ Html.Attributes.class Pure.buttonPrimary, onClick (Search <| User user) ] [ text "Go!" ]
---                 ]
---         Loading ->
---             text "Getting stats."
---         Failure ->
---             text "Something bad happened."
---         Success pushShiftData ->
---             pushShiftData
---                 |> List.map
---                     (\data ->
---                         case data of
---                             RedditPostCount postCounts ->
---                                 let
---                                     result =
---                                         postCounts
---                                             |> List.filter (\x -> x.count > 0)
---                                             |> List.map
---                                                 (\x ->
---                                                     let
---                                                         year =
---                                                             toYear utc <| millisToPosix <| x.date * 1000
---                                                     in
---                                                     PostCount x.count year
---                                                 )
---                                             |> Dict.Extra.groupBy .date
---                                             >> Dict.map (\_ -> List.map .count >> List.sum)
---                                             >> Dict.toList
---                                             >> List.map (\( x, y ) -> PostCount y x)
---                                 in
---                                 let
---                                     values =
---                                         List.map (.count >> toFloat) result
---                                     labels =
---                                         List.map (.date >> String.fromInt) result
---                                     dataset =
---                                         BarData.defaultBarFromData "Posts per year" values
---                                             |> BarData.setBackgroundColor (ChartCommon.All Color.purple)
---                                 in
---                                 Chart.chart []
---                                     (Chart.defaultChart Chart.Bar
---                                         |> Chart.setData
---                                             (ChartData.dataFromLabels
---                                                 labels
---                                                 |> ChartData.addDataset (ChartData.BarData dataset)
---                                             )
---                                     )
---                             RedditPostCountPerSubReddit postCounts1 ->
---                                 text <| "Post counts: " ++ String.fromInt (length postCounts1)
---                     )
---                 |> div []
-
-
 view : Model -> Html Msg
 view model =
     case model of
@@ -175,7 +125,7 @@ view model =
                 |> div []
 
 
-something : PushShiftData -> BarChartData
+something : PushShiftData -> ChartData
 something data =
     case data of
         RedditPostCount postCounts ->
@@ -185,11 +135,7 @@ something data =
                         |> List.filter (\x -> x.count > 0)
                         |> List.map
                             (\x ->
-                                let
-                                    year =
-                                        toYear utc <| millisToPosix <| x.date * 1000
-                                in
-                                PostCount x.count year
+                                PostCount x.count <| toYear utc <| millisToPosix <| x.date * 1000
                             )
                         |> Dict.Extra.groupBy .date
                         >> Dict.map (\_ -> List.map .count >> List.sum)
@@ -202,10 +148,21 @@ something data =
                 labels =
                     List.map (.date >> String.fromInt) result
             in
-            BarChartData "Posts per year" labels values
+            ChartData "Posts per year" labels values
 
-        RedditPostCountPerSubReddit postCount ->
-            BarChartData "TODO" ["One", "Two", "Three", "Four"] [1.0, 50.0, 30.0, 109.0]
+        RedditPostCountPerSubReddit postCounts ->
+            let
+                result =
+                    postCounts
+                        |> List.filter (\x -> x.count > 0)
+
+                values =
+                    List.map (.count >> toFloat) result
+
+                labels =
+                    List.map .subreddit result
+            in
+            ChartData "Posts per year" labels values
 
 
 chartConfig : List PushShiftData -> List Chart.Chart
@@ -218,12 +175,20 @@ chartConfig data =
             )
 
 
-constructChartData : BarChartData -> ChartData.Data
-constructChartData (BarChartData title labels values) =
+constructChartData : ChartData -> ChartData.Data
+constructChartData (ChartData title labels values) =
     let
+        bgColors =
+            List.Extra.cycle (length values) backgroundColors
+
+        bdColors =
+            List.Extra.cycle (length values) borderColors
+
         dataset =
             BarData.defaultBarFromData title values
-                |> BarData.setBackgroundColor (ChartCommon.All Color.purple)
+                |> BarData.setBackgroundColor (ChartCommon.PerPoint bgColors)
+                |> BarData.setBorderColor (ChartCommon.PerPoint bdColors)
+                |> BarData.setBorderWidth (ChartCommon.All 1)
     in
     ChartData.dataFromLabels labels
         |> ChartData.addDataset (ChartData.BarData dataset)
