@@ -5,7 +5,7 @@ import Chartjs.Chart as Chart
 import Chartjs.Common as ChartCommon
 import Chartjs.Data as ChartData
 import Chartjs.DataSets.Bar as BarData
-import Color exposing (darkBlue, darkBrown, darkGreen, darkOrange, darkPurple, darkRed, darkYellow, lightBlue, lightBrown, lightGreen, lightOrange, lightPurple, lightRed, lightYellow)
+import Color exposing (rgb, rgba)
 import Debug exposing (todo)
 import Dict
 import Dict.Extra exposing (groupBy)
@@ -68,12 +68,34 @@ type ChartData
     = ChartData String (List String) (List Float)
 
 
-backgroundColors =
-    [ lightRed, lightOrange, lightYellow, lightGreen, lightBlue, lightPurple, lightBrown ]
-
-
 borderColors =
-    [ darkRed, darkOrange, darkYellow, darkGreen, darkBlue, darkPurple, darkBrown ]
+    [ rgb 0.65 0.807 0.89
+    , rgb 0.121 0.47 0.705
+    , rgb 0.698 0.874 0.541
+    , rgb 0.2 0.627 0.172
+    , rgb 0.984 0.603 0.6
+    , rgb 0.89 0.101 0.109
+    , rgb 0.992 0.749 0.435
+    , rgb 1 0.498 0
+    , rgb 0.792 0.698 0.839
+    , rgb 0.415 0.239 0.603
+    , rgb 0.694 0.349 0.156
+    ]
+
+
+backgroundColors =
+    [ rgba 0.65 0.807 0.89 0.2
+    , rgba 0.121 0.47 0.705 0.2
+    , rgba 0.698 0.874 0.541 0.2
+    , rgba 0.2 0.627 0.172 0.2
+    , rgba 0.984 0.603 0.6 0.2
+    , rgba 0.89 0.101 0.109 0.2
+    , rgba 0.992 0.749 0.435 0.2
+    , rgba 1 0.498 0 0.2
+    , rgba 0.792 0.698 0.839 0.2
+    , rgba 0.415 0.239 0.603 0.2
+    , rgba 0.694 0.349 0.156 0.2
+    ]
 
 
 init : () -> ( Model, Cmd Msg )
@@ -125,8 +147,31 @@ view model =
                 |> div []
 
 
-something : PushShiftData -> ChartData
-something data =
+descending : comparable -> comparable -> Order
+descending a b =
+    case compare a b of
+        LT ->
+            GT
+
+        EQ ->
+            EQ
+
+        GT ->
+            LT
+
+
+orderBy : (a -> comparable) -> (comparable -> comparable -> Order) -> a -> a -> Order
+orderBy accessor orderFunc a b =
+    orderFunc (accessor a) (accessor b)
+
+
+sortByWith : (a -> comparable) -> (comparable -> comparable -> Order) -> List a -> List a
+sortByWith accessor sortFunc list =
+    List.sortWith (orderBy accessor sortFunc) list
+
+
+getAxisData : PushShiftData -> ChartData
+getAxisData data =
     case data of
         RedditPostCount postCounts ->
             let
@@ -152,17 +197,35 @@ something data =
 
         RedditPostCountPerSubReddit postCounts ->
             let
-                result =
+                totalSum =
+                    List.map .count postCounts |> List.sum
+
+                filtered =
                     postCounts
                         |> List.filter (\x -> x.count > 0)
+                        |> sortByWith .count descending
+                        |> List.take 10
+
+                topSum =
+                    List.map .count filtered |> List.sum
+
+                difference =
+                    totalSum - topSum
+
+                final =
+                    if difference > 0 then
+                        filtered ++ [ PostCountSubReddit (totalSum - topSum) "All others" ]
+
+                    else
+                        filtered
 
                 values =
-                    List.map (.count >> toFloat) result
+                    List.map (.count >> toFloat) final
 
                 labels =
-                    List.map .subreddit result
+                    List.map .subreddit final
             in
-            ChartData "Posts per year" labels values
+            ChartData "Posts per subreddit (Top 10)" labels values
 
 
 chartConfig : List PushShiftData -> List Chart.Chart
@@ -170,8 +233,8 @@ chartConfig data =
     data
         |> List.map
             (\d ->
-                Chart.defaultChart Chart.Bar
-                    |> Chart.setData (constructChartData <| something d)
+                Chart.defaultChart Chart.Doughnut
+                    |> Chart.setData (constructChartData <| getAxisData d)
             )
 
 
@@ -200,12 +263,15 @@ main =
 
 
 getRedditStatistics : User -> Task Error (List PushShiftData)
-getRedditStatistics user =
+getRedditStatistics (User user) =
     let
+        u =
+            User <| (String.replace "/u/" "" user |> String.replace "u/" "")
+
         requests =
-            [ getPushShiftData user (Aggregator "created_utc") postCountDecoder
+            [ getPushShiftData u (Aggregator "created_utc") postCountDecoder
                 |> Task.map RedditPostCount
-            , getPushShiftData user (Aggregator "subreddit") postCountSubRedditDecoder
+            , getPushShiftData u (Aggregator "subreddit") postCountSubRedditDecoder
                 |> Task.map RedditPostCountPerSubReddit
             ]
     in
