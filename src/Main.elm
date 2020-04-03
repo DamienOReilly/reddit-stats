@@ -5,21 +5,25 @@ import Chartjs.Chart as Chart
 import Chartjs.Common as ChartCommon
 import Chartjs.Data as ChartData
 import Chartjs.DataSets.Bar as BarData
-import Color exposing (rgb, rgba)
+import Chartjs.DataSets.DoughnutAndPie as DoughnutAndPieData
+import Chartjs.Options as ChartOptions
+import Chartjs.Options.Title as ChartTitle
+import Color exposing (Color)
+import Constants
 import Debug exposing (todo)
 import Dict
-import Dict.Extra exposing (groupBy)
+import Dict.Extra
 import Html exposing (Html, button, div, input, text)
 import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Http
-import Json.Decode as JD exposing (Decoder, field, int, map, map2, string)
-import List exposing (length, map)
+import Json.Decode as JD
+import List
 import List.Extra
 import Pure
 import Task exposing (Task)
 import Time exposing (millisToPosix, toYear, utc)
-import Tuple exposing (first)
+import Utils exposing (descending, sortByWith)
 
 
 type User
@@ -27,12 +31,20 @@ type User
 
 
 type Aggregator
-    = Aggregator String
+    = CreatedUTC
+    | SubReddit
+
+
+type Content
+    = Comment
+    | Submission
 
 
 type PushShiftData
-    = RedditPostCount (List PostCount)
-    | RedditPostCountPerSubReddit (List PostCountSubReddit)
+    = RedditPostCountPerSubReddit (List PostCountSubReddit)
+    | RedditSubmissionCountPerSubReddit (List PostCountSubReddit)
+    | RedditPostCount (List PostCount)
+    | RedditSubmissionCount (List PostCount)
 
 
 type alias PostCount =
@@ -64,38 +76,8 @@ type Model
     | Success (List PushShiftData)
 
 
-type ChartData
-    = ChartData String (List String) (List Float)
-
-
-borderColors =
-    [ rgb 0.65 0.807 0.89
-    , rgb 0.121 0.47 0.705
-    , rgb 0.698 0.874 0.541
-    , rgb 0.2 0.627 0.172
-    , rgb 0.984 0.603 0.6
-    , rgb 0.89 0.101 0.109
-    , rgb 0.992 0.749 0.435
-    , rgb 1 0.498 0
-    , rgb 0.792 0.698 0.839
-    , rgb 0.415 0.239 0.603
-    , rgb 0.694 0.349 0.156
-    ]
-
-
-backgroundColors =
-    [ rgba 0.65 0.807 0.89 0.2
-    , rgba 0.121 0.47 0.705 0.2
-    , rgba 0.698 0.874 0.541 0.2
-    , rgba 0.2 0.627 0.172 0.2
-    , rgba 0.984 0.603 0.6 0.2
-    , rgba 0.89 0.101 0.109 0.2
-    , rgba 0.992 0.749 0.435 0.2
-    , rgba 1 0.498 0 0.2
-    , rgba 0.792 0.698 0.839 0.2
-    , rgba 0.415 0.239 0.603 0.2
-    , rgba 0.694 0.349 0.156 0.2
-    ]
+type AxisData
+    = AxisData (List String) (List Float)
 
 
 init : () -> ( Model, Cmd Msg )
@@ -147,85 +129,78 @@ view model =
                 |> div []
 
 
-descending : comparable -> comparable -> Order
-descending a b =
-    case compare a b of
-        LT ->
-            GT
-
-        EQ ->
-            EQ
-
-        GT ->
-            LT
-
-
-orderBy : (a -> comparable) -> (comparable -> comparable -> Order) -> a -> a -> Order
-orderBy accessor orderFunc a b =
-    orderFunc (accessor a) (accessor b)
-
-
-sortByWith : (a -> comparable) -> (comparable -> comparable -> Order) -> List a -> List a
-sortByWith accessor sortFunc list =
-    List.sortWith (orderBy accessor sortFunc) list
-
-
-getAxisData : PushShiftData -> ChartData
+getAxisData : PushShiftData -> AxisData
 getAxisData data =
     case data of
-        RedditPostCount postCounts ->
-            let
-                result =
-                    postCounts
-                        |> List.filter (\x -> x.count > 0)
-                        |> List.map
-                            (\x ->
-                                PostCount x.count <| toYear utc <| millisToPosix <| x.date * 1000
-                            )
-                        |> Dict.Extra.groupBy .date
-                        >> Dict.map (\_ -> List.map .count >> List.sum)
-                        >> Dict.toList
-                        >> List.map (\( x, y ) -> PostCount y x)
+        RedditPostCount count ->
+            getContentCountPerYear count
 
-                values =
-                    List.map (.count >> toFloat) result
+        RedditSubmissionCount count ->
+            getContentCountPerYear count
 
-                labels =
-                    List.map (.date >> String.fromInt) result
-            in
-            ChartData "Posts per year" labels values
+        RedditPostCountPerSubReddit count ->
+            getContentCountPerSubReddit count
 
-        RedditPostCountPerSubReddit postCounts ->
-            let
-                totalSum =
-                    List.map .count postCounts |> List.sum
+        RedditSubmissionCountPerSubReddit count ->
+            getContentCountPerSubReddit count
 
-                filtered =
-                    postCounts
-                        |> List.filter (\x -> x.count > 0)
-                        |> sortByWith .count descending
-                        |> List.take 10
 
-                topSum =
-                    List.map .count filtered |> List.sum
+getContentCountPerSubReddit : List PostCountSubReddit -> AxisData
+getContentCountPerSubReddit count =
+    let
+        totalSum =
+            List.map .count count |> List.sum
 
-                difference =
-                    totalSum - topSum
+        filtered =
+            count
+                |> List.filter (\x -> x.count > 0)
+                |> sortByWith .count descending
+                |> List.take 10
 
-                final =
-                    if difference > 0 then
-                        filtered ++ [ PostCountSubReddit (totalSum - topSum) "All others" ]
+        topSum =
+            List.map .count filtered |> List.sum
 
-                    else
-                        filtered
+        difference =
+            totalSum - topSum
 
-                values =
-                    List.map (.count >> toFloat) final
+        final =
+            if difference > 0 then
+                filtered ++ [ PostCountSubReddit (totalSum - topSum) "All others" ]
 
-                labels =
-                    List.map .subreddit final
-            in
-            ChartData "Posts per subreddit (Top 10)" labels values
+            else
+                filtered
+
+        values =
+            List.map (.count >> toFloat) final
+
+        labels =
+            List.map .subreddit final
+    in
+    AxisData labels values
+
+
+getContentCountPerYear : List PostCount -> AxisData
+getContentCountPerYear count =
+    let
+        result =
+            count
+                |> List.filter (\x -> x.count > 0)
+                |> List.map
+                    (\x ->
+                        PostCount x.count <| toYear utc <| millisToPosix <| x.date * 1000
+                    )
+                |> Dict.Extra.groupBy .date
+                >> Dict.map (\_ -> List.map .count >> List.sum)
+                >> Dict.toList
+                >> List.map (\( x, y ) -> PostCount y x)
+
+        values =
+            List.map (.count >> toFloat) result
+
+        labels =
+            List.map (.date >> String.fromInt) result
+    in
+    AxisData labels values
 
 
 chartConfig : List PushShiftData -> List Chart.Chart
@@ -233,28 +208,65 @@ chartConfig data =
     data
         |> List.map
             (\d ->
-                Chart.defaultChart Chart.Doughnut
-                    |> Chart.setData (constructChartData <| getAxisData d)
+                case d of
+                    RedditPostCount _ ->
+                        Chart.defaultChart Chart.Bar
+                            |> Chart.setData (constructBarChartData (getAxisData d) "Posts" (ChartCommon.All Constants.colora2) (ChartCommon.All Constants.color2))
+                            |> Chart.setOptions (chartOptions "Posts per year")
+
+                    RedditSubmissionCount _ ->
+                        Chart.defaultChart Chart.Bar
+                            |> Chart.setData (constructBarChartData (getAxisData d) "Submissions" (ChartCommon.All Constants.colora6) (ChartCommon.All Constants.color6))
+                            |> Chart.setOptions (chartOptions "Submissions per year")
+
+                    RedditPostCountPerSubReddit _ ->
+                        Chart.defaultChart Chart.Pie
+                            |> Chart.setData (constructPieChartData (getAxisData d) "Posts" Constants.borderColors)
+                            |> Chart.setOptions (chartOptions "Posts per subreddit (Top 10)")
+
+                    RedditSubmissionCountPerSubReddit _ ->
+                        Chart.defaultChart Chart.Pie
+                            |> Chart.setData (constructPieChartData (getAxisData d) "Submissions" Constants.borderColors)
+                            |> Chart.setOptions (chartOptions "Submissions per subreddit (Top 10)")
             )
 
 
-constructChartData : ChartData -> ChartData.Data
-constructChartData (ChartData title labels values) =
+chartOptions : String -> ChartOptions.Options
+chartOptions title =
+    ChartOptions.defaultOptions
+        |> ChartOptions.setTitle
+            (ChartTitle.defaultTitle
+                |> ChartTitle.setText
+                    title
+                |> ChartTitle.setDisplay True
+            )
+
+
+constructPieChartData : AxisData -> String -> List Color -> ChartData.Data
+constructPieChartData (AxisData labels values) label colors =
     let
-        bgColors =
-            List.Extra.cycle (length values) backgroundColors
+        colorsCycled =
+            List.Extra.cycle (List.length values) colors
 
-        bdColors =
-            List.Extra.cycle (length values) borderColors
+        dataSet =
+            DoughnutAndPieData.defaultPieFromData label values
+                |> DoughnutAndPieData.setBackgroundColor (ChartCommon.PerPoint colorsCycled)
+    in
+    ChartData.dataFromLabels labels
+        |> ChartData.addDataset (ChartData.PieData dataSet)
 
-        dataset =
-            BarData.defaultBarFromData title values
-                |> BarData.setBackgroundColor (ChartCommon.PerPoint bgColors)
-                |> BarData.setBorderColor (ChartCommon.PerPoint bdColors)
+
+constructBarChartData : AxisData -> String -> ChartCommon.PointProperty Color -> ChartCommon.PointProperty Color -> ChartData.Data
+constructBarChartData (AxisData labels values) label bgColor bdColor =
+    let
+        dataSet =
+            BarData.defaultBarFromData label values
+                |> BarData.setBackgroundColor bgColor
+                |> BarData.setBorderColor bdColor
                 |> BarData.setBorderWidth (ChartCommon.All 1)
     in
     ChartData.dataFromLabels labels
-        |> ChartData.addDataset (ChartData.BarData dataset)
+        |> ChartData.addDataset (ChartData.BarData dataSet)
 
 
 main : Program () Model Msg
@@ -266,51 +278,74 @@ getRedditStatistics : User -> Task Error (List PushShiftData)
 getRedditStatistics (User user) =
     let
         u =
-            User <| (String.replace "/u/" "" user |> String.replace "u/" "")
+            User (String.replace "/u/" "" user |> String.replace "u/" "")
 
         requests =
-            [ getPushShiftData u (Aggregator "created_utc") postCountDecoder
-                |> Task.map RedditPostCount
-            , getPushShiftData u (Aggregator "subreddit") postCountSubRedditDecoder
+            [ getPushShiftData u SubReddit Comment postCountSubRedditDecoder
                 |> Task.map RedditPostCountPerSubReddit
+
+            , getPushShiftData u SubReddit Submission postCountSubRedditDecoder
+                |> Task.map RedditSubmissionCountPerSubReddit
+            , getPushShiftData u CreatedUTC Comment postCountDecoder
+                |> Task.map RedditPostCount
+
+            , getPushShiftData u CreatedUTC Submission postCountDecoder
+                |> Task.map RedditSubmissionCount
             ]
     in
     Task.sequence requests
         |> Task.mapError HttpError
 
 
-getPushShiftData : User -> Aggregator -> JD.Decoder a -> Task Http.Error (List a)
-getPushShiftData (User user) (Aggregator aggregator) decoder =
+getPushShiftData : User -> Aggregator -> Content -> JD.Decoder a -> Task Http.Error (List a)
+getPushShiftData (User user) aggregator content decoder =
+    let
+        aggregatorType =
+            case aggregator of
+                CreatedUTC ->
+                    "created_utc"
+
+                SubReddit ->
+                    "subreddit"
+
+        contentType =
+            case content of
+                Comment ->
+                    "comment"
+
+                Submission ->
+                    "submission"
+    in
     Http.task
         { method = "GET"
         , headers = []
-        , url = "https://api.pushshift.io/reddit/search/comment?author=" ++ user ++ "&aggs=" ++ aggregator ++ "&frequency=day&size=0"
+        , url = "https://api.pushshift.io/reddit/search/" ++ contentType ++ "?author=" ++ user ++ "&aggs=" ++ aggregatorType ++ "&frequency=day&size=0"
         , body = Http.emptyBody
-        , resolver = Http.stringResolver <| handleJsonResponse <| pushShiftAggDecoder decoder aggregator
+        , resolver = Http.stringResolver <| handleJsonResponse <| pushShiftAggDecoder decoder aggregatorType
         , timeout = Nothing
         }
 
 
 postCountDecoder : JD.Decoder PostCount
 postCountDecoder =
-    map2 PostCount
-        (field "doc_count" int)
-        (field "key" int)
+    JD.map2 PostCount
+        (JD.field "doc_count" JD.int)
+        (JD.field "key" JD.int)
 
 
 postCountSubRedditDecoder : JD.Decoder PostCountSubReddit
 postCountSubRedditDecoder =
-    map2 PostCountSubReddit
-        (field "doc_count" int)
-        (field "key" string)
+    JD.map2 PostCountSubReddit
+        (JD.field "doc_count" JD.int)
+        (JD.field "key" JD.string)
 
 
-pushShiftAggDecoder : JD.Decoder a -> String -> Decoder (List a)
+pushShiftAggDecoder : JD.Decoder a -> String -> JD.Decoder (List a)
 pushShiftAggDecoder decoder aggregator =
-    JD.map identity (field "aggs" (field aggregator (JD.list decoder)))
+    JD.map identity (JD.field "aggs" (JD.field aggregator (JD.list decoder)))
 
 
-handleJsonResponse : Decoder a -> Http.Response String -> Result Http.Error a
+handleJsonResponse : JD.Decoder a -> Http.Response String -> Result Http.Error a
 handleJsonResponse decoder response =
     case response of
         Http.BadUrl_ url ->
