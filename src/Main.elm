@@ -22,8 +22,8 @@ import List
 import List.Extra
 import Pure
 import Task exposing (Task)
-import Time exposing (millisToPosix, toYear, utc)
-import Utils exposing (descending, sortByWith)
+import Time exposing (millisToPosix, toMonth, toYear, utc)
+import Utils exposing (descending, sortByWith, toMonthNum)
 
 
 type User
@@ -48,14 +48,20 @@ type PushShiftData
 
 
 type alias PostCount =
-    { count : Int
-    , date : Int
+    { date : Int
+    , count : Int
+    }
+
+
+type alias PostCountPerMonthPerYear =
+    { date : ( Int, Int )
+    , count : Int
     }
 
 
 type alias PostCountSubReddit =
-    { count : Int
-    , subreddit : String
+    { subreddit : String
+    , count : Int
     }
 
 
@@ -165,7 +171,7 @@ getContentCountPerSubReddit count =
 
         final =
             if difference > 0 then
-                filtered ++ [ PostCountSubReddit (totalSum - topSum) "All others" ]
+                filtered ++ [ PostCountSubReddit "All others" (totalSum - topSum) ]
 
             else
                 filtered
@@ -187,12 +193,12 @@ getContentCountPerYear count =
                 |> List.filter (\x -> x.count > 0)
                 |> List.map
                     (\x ->
-                        PostCount x.count <| toYear utc <| millisToPosix <| x.date * 1000
+                        PostCount (toYear utc <| millisToPosix <| x.date * 1000) x.count
                     )
                 |> Dict.Extra.groupBy .date
                 >> Dict.map (\_ -> List.map .count >> List.sum)
                 >> Dict.toList
-                >> List.map (\( x, y ) -> PostCount y x)
+                >> List.map (\( date, aggCount ) -> PostCount date aggCount)
 
         values =
             List.map (.count >> toFloat) result
@@ -201,6 +207,35 @@ getContentCountPerYear count =
             List.map (.date >> String.fromInt) result
     in
     AxisData labels values
+
+
+getContentCountPerMonthPerYear : List PostCount -> List AxisData
+getContentCountPerMonthPerYear count =
+    let
+        result =
+            count
+                |> List.filter (\x -> x.count > 0)
+                |> List.map
+                    (\x ->
+                        PostCountPerMonthPerYear
+                            ( toYear utc <| millisToPosix <| x.date * 1000
+                            , toMonthNum <| toMonth utc <| millisToPosix <| x.date * 1000
+                            )
+                            x.count
+                    )
+                |> Dict.Extra.groupBy .date
+                >> Dict.map (\_ -> List.map .count >> List.sum)
+                >> Dict.toList
+                >> List.map (\( date, aggCount ) -> PostCountPerMonthPerYear date aggCount)
+    in
+    --    values =
+    --        List.map (.count >> toFloat) result
+    --
+    --    labels =
+    --        List.map (.date >> String.fromInt) result
+    --in
+    --AxisData labels values
+    Debug.todo "Not finished!"
 
 
 chartConfig : List PushShiftData -> List Chart.Chart
@@ -283,12 +318,10 @@ getRedditStatistics (User user) =
         requests =
             [ getPushShiftData u SubReddit Comment postCountSubRedditDecoder
                 |> Task.map RedditPostCountPerSubReddit
-
             , getPushShiftData u SubReddit Submission postCountSubRedditDecoder
                 |> Task.map RedditSubmissionCountPerSubReddit
             , getPushShiftData u CreatedUTC Comment postCountDecoder
                 |> Task.map RedditPostCount
-
             , getPushShiftData u CreatedUTC Submission postCountDecoder
                 |> Task.map RedditSubmissionCount
             ]
@@ -329,15 +362,15 @@ getPushShiftData (User user) aggregator content decoder =
 postCountDecoder : JD.Decoder PostCount
 postCountDecoder =
     JD.map2 PostCount
-        (JD.field "doc_count" JD.int)
         (JD.field "key" JD.int)
+        (JD.field "doc_count" JD.int)
 
 
 postCountSubRedditDecoder : JD.Decoder PostCountSubReddit
 postCountSubRedditDecoder =
     JD.map2 PostCountSubReddit
-        (JD.field "doc_count" JD.int)
         (JD.field "key" JD.string)
+        (JD.field "doc_count" JD.int)
 
 
 pushShiftAggDecoder : JD.Decoder a -> String -> JD.Decoder (List a)
