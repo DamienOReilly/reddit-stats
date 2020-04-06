@@ -19,6 +19,7 @@
             "elm-community/dict-extra": "2.4.0",
             "elm-community/list-extra": "8.2.3",
             "indicatrix/elm-chartjs-webcomponent": "1.0.0",
+            "kmbn/elm-hotkeys": "1.1.1",
             "ryannhg/date-format": "2.3.0"
         },
         "indirect": {

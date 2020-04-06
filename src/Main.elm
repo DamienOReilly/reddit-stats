@@ -15,9 +15,10 @@ import DateFormat
 import Debug exposing (todo)
 import Dict
 import Dict.Extra
+import Hotkeys exposing (onEnterSend)
 import Html exposing (Html, button, div, input, text)
 import Html.Attributes exposing (placeholder, value)
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onClick)
 import Http
 import Json.Decode as JD
 import List
@@ -73,12 +74,11 @@ type Error
 
 type Msg
     = GotResult (Result Error (List PushShiftData))
-    | ChangeInput User
     | Search User
 
 
 type Model
-    = TargetUser User
+    = InputUser User
     | Loading
     | Failure
     | Success (List PushShiftData)
@@ -90,17 +90,18 @@ type AxisData
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( TargetUser <| User "", Cmd.none )
+    ( InputUser <| User "", Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg _ =
     case msg of
-        ChangeInput user ->
-            ( TargetUser user, Cmd.none )
+        Search (User user) ->
+            if String.length user > 0 then
+                ( Loading, Task.attempt GotResult <| getRedditStatistics <| User user )
 
-        Search user ->
-            ( Loading, Task.attempt GotResult <| getRedditStatistics user )
+            else
+                ( InputUser <| User "", Cmd.none )
 
         GotResult result ->
             case result of
@@ -119,17 +120,19 @@ subscriptions _ =
 view : Model -> Html Msg
 view model =
     case model of
-        TargetUser (User user) ->
+        InputUser (User user) ->
             div [ Html.Attributes.class Pure.grid ]
                 [ input
-                    [ placeholder "User to search for."
+                    [ Html.Attributes.autofocus True
+                    , Html.Attributes.class "input-reddit"
+                    , placeholder "User to search for."
                     , value user
-                    , onInput <| ChangeInput << (\u -> User u)
+                    , onEnterSend <| Search << (\u -> User u)
                     ]
                     []
                 , button
                     [ Html.Attributes.class Pure.button
-                    , Html.Attributes.class "button-reddit "
+                    , Html.Attributes.class "button-reddit"
                     , onClick (Search <| User user)
                     ]
                     [ text "Go!" ]
@@ -164,7 +167,7 @@ getContentCountPerSubReddit count =
             count
                 |> List.filter (\x -> x.count > 0)
                 |> sortByWith .count descending
-                |> List.take 10
+                |> List.take Constants.topSubreddits
 
         topSum =
             List.map .count filtered |> List.sum
@@ -418,7 +421,7 @@ getPushShiftData (User user) aggregator content decoder =
         , url = "https://" ++ Constants.pushShiftServer ++ "/reddit/search/" ++ contentType ++ "?author=" ++ user ++ "&aggs=" ++ aggregatorType ++ "&frequency=month&size=0"
         , body = Http.emptyBody
         , resolver = Http.stringResolver <| handleJsonResponse <| pushShiftAggDecoder decoder aggregatorType
-        , timeout = Nothing
+        , timeout = Just Constants.httpTimeout
         }
 
 

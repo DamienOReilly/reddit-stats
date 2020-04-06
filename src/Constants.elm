@@ -23,6 +23,7 @@ module Constants exposing
     , colora7
     , colora8
     , colora9
+    , httpTimeout
     , lastNumberOfMonthsForLineGraph
     , pushShiftServer
     , topSubreddits
@@ -41,6 +42,12 @@ topSubreddits =
 
 lastNumberOfMonthsForLineGraph =
     24
+
+
+{-| timeout in millis for the http calls
+-}
+httpTimeout =
+    120 * 1000
 
 
 color1 =
