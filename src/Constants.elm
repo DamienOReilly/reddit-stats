@@ -1,6 +1,6 @@
 module Constants exposing
     ( backgroundColors
-    , borderColors    
+    , borderColors
     , color1
     , color10
     , color11
@@ -23,9 +23,25 @@ module Constants exposing
     , colora7
     , colora8
     , colora9
+    , lastNumberOfMonthsForLineGraph
+    , pushShiftServer
+    , topSubreddits
     )
 
 import Color exposing (Color, rgb, rgba)
+
+
+pushShiftServer =
+    "api.pushshift.io"
+
+
+topSubreddits =
+    10
+
+
+lastNumberOfMonthsForLineGraph =
+    24
+
 
 color1 =
     rgb 0.65 0.807 0.89
@@ -70,7 +86,11 @@ color10 =
 color11 =
     rgb 0.694 0.349 0.156
 
+
+
 -- alpha colors
+
+
 colora1 =
     rgba 0.65 0.807 0.89 0.2
 
@@ -114,6 +134,7 @@ colora10 =
 colora11 =
     rgba 0.694 0.349 0.156 0.2
 
+
 borderColors : List Color
 borderColors =
     [ color1
@@ -128,6 +149,7 @@ borderColors =
     , color10
     , color11
     ]
+
 
 backgroundColors : List Color
 backgroundColors =

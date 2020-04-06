@@ -6,10 +6,12 @@ import Chartjs.Common as ChartCommon
 import Chartjs.Data as ChartData
 import Chartjs.DataSets.Bar as BarData
 import Chartjs.DataSets.DoughnutAndPie as DoughnutAndPieData
+import Chartjs.DataSets.Line as LineData
 import Chartjs.Options as ChartOptions
 import Chartjs.Options.Title as ChartTitle
 import Color exposing (Color)
 import Constants
+import DateFormat
 import Debug exposing (todo)
 import Dict
 import Dict.Extra
@@ -22,8 +24,8 @@ import List
 import List.Extra
 import Pure
 import Task exposing (Task)
-import Time exposing (millisToPosix, toMonth, toYear, utc)
-import Utils exposing (descending, sortByWith, toMonthNum)
+import Time exposing (Month(..), millisToPosix, toYear, utc)
+import Utils exposing (descending, sortByWith)
 
 
 type User
@@ -53,8 +55,8 @@ type alias PostCount =
     }
 
 
-type alias PostCountPerMonthPerYear =
-    { date : ( Int, Int )
+type alias PostCountPerDay =
+    { date : String
     , count : Int
     }
 
@@ -119,36 +121,37 @@ view model =
     case model of
         TargetUser (User user) ->
             div [ Html.Attributes.class Pure.grid ]
-                [ input [ placeholder "User to search for.", value user, onInput <| ChangeInput << (\u -> User u) ] []
-                , button [ Html.Attributes.class Pure.buttonPrimary, onClick (Search <| User user) ] [ text "Go!" ]
+                [ input
+                    [ placeholder "User to search for."
+                    , value user
+                    , onInput <| ChangeInput << (\u -> User u)
+                    ]
+                    []
+                , button
+                    [ Html.Attributes.class Pure.button
+                    , Html.Attributes.class "button-reddit "
+                    , onClick (Search <| User user)
+                    ]
+                    [ text "Go!" ]
                 ]
 
         Loading ->
-            text "Getting stats."
+            div [ Html.Attributes.class Pure.grid, Html.Attributes.class "loader" ] []
 
         Failure ->
             text "Something bad happened."
 
         Success pushShiftData ->
-            chartConfig pushShiftData
-                |> List.map (\x -> Chart.chart [] x)
-                |> div []
-
-
-getAxisData : PushShiftData -> AxisData
-getAxisData data =
-    case data of
-        RedditPostCount count ->
-            getContentCountPerYear count
-
-        RedditSubmissionCount count ->
-            getContentCountPerYear count
-
-        RedditPostCountPerSubReddit count ->
-            getContentCountPerSubReddit count
-
-        RedditSubmissionCountPerSubReddit count ->
-            getContentCountPerSubReddit count
+            chartConstructor pushShiftData
+                |> List.map
+                    (\chart ->
+                        div
+                            [ Html.Attributes.class (Pure.unit [ "1" ])
+                            , Html.Attributes.class (Pure.unit [ "md", "1", "2" ])
+                            ]
+                            [ Chart.chart [] chart ]
+                    )
+                |> div [ Html.Attributes.class Pure.grid ]
 
 
 getContentCountPerSubReddit : List PostCountSubReddit -> AxisData
@@ -209,61 +212,108 @@ getContentCountPerYear count =
     AxisData labels values
 
 
-getContentCountPerMonthPerYear : List PostCount -> List AxisData
-getContentCountPerMonthPerYear count =
+getContentCountPerMonth : List PostCount -> AxisData
+getContentCountPerMonth count =
     let
         result =
             count
-                |> List.filter (\x -> x.count > 0)
+                |> sortByWith .date descending
+                |> List.take Constants.lastNumberOfMonthsForLineGraph
                 |> List.map
                     (\x ->
-                        PostCountPerMonthPerYear
-                            ( toYear utc <| millisToPosix <| x.date * 1000
-                            , toMonthNum <| toMonth utc <| millisToPosix <| x.date * 1000
+                        let
+                            datePosix =
+                                millisToPosix <| x.date * 1000
+                        in
+                        PostCountPerDay
+                            (DateFormat.format
+                                [ DateFormat.monthNameAbbreviated
+                                , DateFormat.text " "
+                                , DateFormat.yearNumber
+                                ]
+                                utc
+                                datePosix
                             )
                             x.count
                     )
-                |> Dict.Extra.groupBy .date
-                >> Dict.map (\_ -> List.map .count >> List.sum)
-                >> Dict.toList
-                >> List.map (\( date, aggCount ) -> PostCountPerMonthPerYear date aggCount)
+                |> List.reverse
+
+        values =
+            List.map (.count >> toFloat) result
+
+        labels =
+            List.map .date result
     in
-    --    values =
-    --        List.map (.count >> toFloat) result
-    --
-    --    labels =
-    --        List.map (.date >> String.fromInt) result
-    --in
-    --AxisData labels values
-    Debug.todo "Not finished!"
+    AxisData labels values
 
 
-chartConfig : List PushShiftData -> List Chart.Chart
-chartConfig data =
+chartConstructor : List PushShiftData -> List Chart.Chart
+chartConstructor data =
     data
         |> List.map
             (\d ->
                 case d of
-                    RedditPostCount _ ->
-                        Chart.defaultChart Chart.Bar
-                            |> Chart.setData (constructBarChartData (getAxisData d) "Posts" (ChartCommon.All Constants.colora2) (ChartCommon.All Constants.color2))
+                    RedditPostCount postCount ->
+                        [ Chart.defaultChart Chart.Bar
+                            |> Chart.setData
+                                (constructBarChartData (getContentCountPerYear postCount)
+                                    "Posts"
+                                    (ChartCommon.All Constants.colora2)
+                                    (ChartCommon.All Constants.color2)
+                                )
                             |> Chart.setOptions (chartOptions "Posts per year")
+                        , Chart.defaultChart Chart.Line
+                            |> Chart.setData
+                                (constructLineChartData (getContentCountPerMonth postCount)
+                                    "Posts"
+                                    (ChartCommon.All Constants.colora3)
+                                    (ChartCommon.All Constants.color3)
+                                )
+                            |> Chart.setOptions (chartOptions <| "Posts per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
+                        ]
 
-                    RedditSubmissionCount _ ->
-                        Chart.defaultChart Chart.Bar
-                            |> Chart.setData (constructBarChartData (getAxisData d) "Submissions" (ChartCommon.All Constants.colora6) (ChartCommon.All Constants.color6))
+                    RedditSubmissionCount submissionCount ->
+                        [ Chart.defaultChart Chart.Bar
+                            |> Chart.setData
+                                (constructBarChartData (getContentCountPerYear submissionCount)
+                                    "Submissions"
+                                    (ChartCommon.All Constants.colora6)
+                                    (ChartCommon.All Constants.color6)
+                                )
                             |> Chart.setOptions (chartOptions "Submissions per year")
+                        , Chart.defaultChart Chart.Line
+                            |> Chart.setData
+                                (constructLineChartData (getContentCountPerMonth submissionCount)
+                                    "Submissions"
+                                    (ChartCommon.All Constants.colora7)
+                                    (ChartCommon.All Constants.color7)
+                                )
+                            |> Chart.setOptions (chartOptions <| "Submissions per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
+                        ]
 
-                    RedditPostCountPerSubReddit _ ->
-                        Chart.defaultChart Chart.Pie
-                            |> Chart.setData (constructPieChartData (getAxisData d) "Posts" Constants.borderColors)
-                            |> Chart.setOptions (chartOptions "Posts per subreddit (Top 10)")
+                    RedditPostCountPerSubReddit postCountPerSubReddit ->
+                        [ Chart.defaultChart Chart.Pie
+                            |> Chart.setData
+                                (constructPieChartData
+                                    (getContentCountPerSubReddit postCountPerSubReddit)
+                                    "Posts"
+                                    Constants.borderColors
+                                )
+                            |> Chart.setOptions (chartOptions <| "Posts per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
+                        ]
 
-                    RedditSubmissionCountPerSubReddit _ ->
-                        Chart.defaultChart Chart.Pie
-                            |> Chart.setData (constructPieChartData (getAxisData d) "Submissions" Constants.borderColors)
-                            |> Chart.setOptions (chartOptions "Submissions per subreddit (Top 10)")
+                    RedditSubmissionCountPerSubReddit submissionCountPerSubReddit ->
+                        [ Chart.defaultChart Chart.Pie
+                            |> Chart.setData
+                                (constructPieChartData
+                                    (getContentCountPerSubReddit submissionCountPerSubReddit)
+                                    "Submissions"
+                                    Constants.borderColors
+                                )
+                            |> Chart.setOptions (chartOptions <| "Submissions per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
+                        ]
             )
+        |> List.concat
 
 
 chartOptions : String -> ChartOptions.Options
@@ -302,6 +352,19 @@ constructBarChartData (AxisData labels values) label bgColor bdColor =
     in
     ChartData.dataFromLabels labels
         |> ChartData.addDataset (ChartData.BarData dataSet)
+
+
+constructLineChartData : AxisData -> String -> ChartCommon.PointProperty Color -> ChartCommon.PointProperty Color -> ChartData.Data
+constructLineChartData (AxisData labels values) label bgColor bdColor =
+    let
+        dataSet =
+            LineData.defaultLineFromData label values
+                |> LineData.setBackgroundColor bgColor
+                |> LineData.setBorderColor bdColor
+                |> LineData.setBorderWidth (ChartCommon.All 1)
+    in
+    ChartData.dataFromLabels labels
+        |> ChartData.addDataset (ChartData.LineData dataSet)
 
 
 main : Program () Model Msg
@@ -352,7 +415,7 @@ getPushShiftData (User user) aggregator content decoder =
     Http.task
         { method = "GET"
         , headers = []
-        , url = "https://api.pushshift.io/reddit/search/" ++ contentType ++ "?author=" ++ user ++ "&aggs=" ++ aggregatorType ++ "&frequency=day&size=0"
+        , url = "https://" ++ Constants.pushShiftServer ++ "/reddit/search/" ++ contentType ++ "?author=" ++ user ++ "&aggs=" ++ aggregatorType ++ "&frequency=month&size=0"
         , body = Http.emptyBody
         , resolver = Http.stringResolver <| handleJsonResponse <| pushShiftAggDecoder decoder aggregatorType
         , timeout = Nothing
