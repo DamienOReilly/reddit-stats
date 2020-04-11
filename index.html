@@ -12,7 +12,10 @@
   <script src ="webcomponent/chart.js"></script>
   <script src="elm.js"></script>
   <script>
-    var app = Elm.Main.init({ node: document.querySelector('main') })
+    var app = Elm.Main.init({
+      node: document.querySelector('main'),
+      flags: window.location.href
+    })
   </script>
 </body>
 </html>
