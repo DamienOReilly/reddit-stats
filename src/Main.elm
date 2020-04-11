@@ -18,7 +18,7 @@ import Debug
 import Dict
 import Dict.Extra
 import Hotkeys exposing (onEnterSend)
-import Html exposing (Html, button, div, input, text)
+import Html exposing (Html, a, button, div, i, input, text)
 import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Http
@@ -60,6 +60,7 @@ type Model
     | Loading
     | Failure
     | Success PushShiftResult
+    | Snapshot PushShiftResult
 
 
 type AxisData
@@ -73,7 +74,7 @@ init urlString =
             (\url ->
                 case extractSnapShotArgument url of
                     Just (PushShiftResult user time data) ->
-                        ( Success (PushShiftResult user time data), Cmd.none )
+                        ( Snapshot (PushShiftResult user time data), Cmd.none )
 
                     Nothing ->
                         ( InputUser <| User "", Cmd.none )
@@ -133,11 +134,12 @@ inputName (User user) =
             , Html.Attributes.class "button-reddit"
             , onClick (Search <| User user)
             ]
-            [ text "Go!" ]
+            [ i [ Html.Attributes.class "fab", Html.Attributes.class "fa-reddit-alien", Html.Attributes.class "fa-2x" ] [] ]
         ]
 
-{-| Maybe.withDefault "" (serializeSnapShot (PushShiftResult user time pushShiftData))-} 
 
+{-| Maybe.withDefault "" (serializeSnapShot (PushShiftResult user time pushShiftData))
+-}
 view : Model -> Html Msg
 view model =
     case model of
@@ -149,9 +151,17 @@ view model =
 
         Failure ->
             text "Something bad happened."
+
         Success (PushShiftResult user time pushShiftData) ->
-            inputName user
-                :: div [] [ text  "" ]
+            div []
+                [ a
+                    [ Html.Attributes.class Pure.button
+                    , Html.Attributes.class "button-reddit"
+                    , Html.Attributes.href <| "?snapshot=" ++ Maybe.withDefault "" (serializeSnapShot <| PushShiftResult user time pushShiftData)
+                    , Html.Attributes.target "_blank"
+                    ]
+                    [ i [ Html.Attributes.class "fas", Html.Attributes.class "fa-share-alt", Html.Attributes.class "fa-2x" ] [] ]
+                ]
                 :: [ chartConstructor pushShiftData
                         |> List.map
                             (\chart ->
@@ -164,6 +174,20 @@ view model =
                         |> div [ Html.Attributes.class Pure.grid ]
                    ]
                 |> div []
+
+        Snapshot (PushShiftResult user time pushShiftData) ->
+            div []
+                [ chartConstructor pushShiftData
+                        |> List.map
+                            (\chart ->
+                                div
+                                    [ Html.Attributes.class (Pure.unit [ "1" ])
+                                    , Html.Attributes.class (Pure.unit [ "md", "1", "2" ])
+                                    ]
+                                    [ Chart.chart [] chart ]
+                            )
+                        |> div [ Html.Attributes.class Pure.grid ]
+                   ]
 
 
 getContentCountPerSubReddit : List PostCountSubReddit -> AxisData
@@ -341,7 +365,6 @@ chartOptions title =
             (ChartLegend.defaultLegend
                 |> ChartLegend.setPosition ChartCommon.Bottom
             )
-
 
 
 constructPieChartData : AxisData -> String -> List Color -> ChartData.Data
