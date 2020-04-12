@@ -26,6 +26,7 @@ module Constants exposing
     , httpTimeout
     , lastNumberOfMonthsForLineGraph
     , pushShiftServer
+    , redditUserUrl
     , topSubreddits
     )
 
@@ -34,6 +35,10 @@ import Color exposing (Color, rgb, rgba)
 
 pushShiftServer =
     "api.pushshift.io"
+
+
+redditUserUrl =
+    "https://www.reddit.com/user/"
 
 
 topSubreddits =

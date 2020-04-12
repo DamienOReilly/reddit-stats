@@ -10,7 +10,7 @@ import Chartjs.DataSets.Line as LineData
 import Chartjs.Options as ChartOptions
 import Chartjs.Options.Legend as ChartLegend
 import Chartjs.Options.Title as ChartTitle
-import Codecs exposing (PostCount, PostCountPerDay, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot)
+import Codecs exposing (PostCount, PostCountPerDay, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
 import Color exposing (Color)
 import Constants
 import DateFormat
@@ -18,7 +18,7 @@ import Debug
 import Dict
 import Dict.Extra
 import Hotkeys exposing (onEnterSend)
-import Html exposing (Html, a, button, div, i, input, text)
+import Html exposing (Html, a, button, div, h3, i, input, text)
 import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Http
@@ -30,7 +30,7 @@ import Pure
 import Task exposing (Task)
 import Time exposing (Month(..), millisToPosix, toYear, utc)
 import Url
-import Url.Parser as UrlParser exposing ((<?>))
+import Url.Parser as UrlParser
 import Url.Parser.Query as UrlParserQuery
 import Utils exposing (descending, sortByWith)
 
@@ -58,7 +58,7 @@ type Msg
 type Model
     = InputUser User
     | Loading
-    | Failure
+    | Failure String
     | Success PushShiftResult
     | Snapshot PushShiftResult
 
@@ -70,24 +70,25 @@ type AxisData
 init : String -> ( Model, Cmd Msg )
 init urlString =
     Url.fromString urlString
+        |> Maybe.andThen extractSnapShotArgument
+        |> Maybe.map deserializeSnapShot
         |> Maybe.map
-            (\url ->
-                case extractSnapShotArgument url of
+            (\maybePushShiftData ->
+                case maybePushShiftData of
                     Just (PushShiftResult user time data) ->
                         ( Snapshot (PushShiftResult user time data), Cmd.none )
 
                     Nothing ->
-                        ( InputUser <| User "", Cmd.none )
+                        ( Failure "Bad snaphot data.", Cmd.none )
             )
         |> Maybe.withDefault ( InputUser <| User "", Cmd.none )
 
 
-extractSnapShotArgument : Url.Url -> Maybe PushShiftResult
+extractSnapShotArgument : Url.Url -> Maybe String
 extractSnapShotArgument location =
     { location | path = "" }
         |> UrlParser.parse (UrlParser.query (UrlParserQuery.string "snapshot"))
         |> Maybe.withDefault Nothing
-        |> Maybe.andThen deserializeSnapShot
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -109,7 +110,7 @@ update msg _ =
                     ( Success pushShiftResult, Cmd.none )
 
                 Err _ ->
-                    ( Failure, Cmd.none )
+                    ( Failure "Error retriving data from the Pushshift API.", Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
@@ -119,10 +120,12 @@ subscriptions _ =
 
 inputName : User -> Html Msg
 inputName (User user) =
-    div [ Html.Attributes.class Pure.grid ] <|
-        [ input
+    div [ Html.Attributes.class Pure.grid, Html.Attributes.class (Pure.unit [ "5", "6" ]) ] <|
+        [ div [ Html.Attributes.class (Pure.unit [ "6", "24" ]) ] []
+        , input
             [ Html.Attributes.autofocus True
             , Html.Attributes.class "input-reddit"
+            , Html.Attributes.class (Pure.unit [ "8", "24" ])
             , placeholder "User to search for."
             , value user
             , onInput <| ChangeInput << (\u -> User u)
@@ -132,62 +135,119 @@ inputName (User user) =
         , button
             [ Html.Attributes.class Pure.button
             , Html.Attributes.class "button-reddit"
+            , Html.Attributes.class (Pure.unit [ "3", "24" ])
             , onClick (Search <| User user)
             ]
             [ i [ Html.Attributes.class "fab", Html.Attributes.class "fa-reddit-alien", Html.Attributes.class "fa-2x" ] [] ]
+        , div [ Html.Attributes.class (Pure.unit [ "7", "24" ]) ] []
         ]
 
 
-{-| Maybe.withDefault "" (serializeSnapShot (PushShiftResult user time pushShiftData))
--}
 view : Model -> Html Msg
 view model =
     case model of
         InputUser (User user) ->
-            inputName (User user)
+            div [ Html.Attributes.class (Pure.unit [ "5", "6" ]) ] []
+                :: githubLinkElement
+                :: [ inputName (User user) ]
+                |> div [ Html.Attributes.class "content", Html.Attributes.class Pure.grid ]
 
         Loading ->
             div [ Html.Attributes.class Pure.grid, Html.Attributes.class "loader" ] []
 
-        Failure ->
-            text "Something bad happened."
+        Failure message ->
+            div [ Html.Attributes.class (Pure.unit [ "2", "3" ]) ] []
+                :: homeElement
+                :: githubLinkElement
+                :: [ div [ Html.Attributes.class (Pure.unit [ "1", "1" ]), Html.Attributes.class "info-container" ] [ text message ] ]
+                |> div [ Html.Attributes.class "content", Html.Attributes.class Pure.grid ]
 
-        Success (PushShiftResult user time pushShiftData) ->
-            div []
+        Success (PushShiftResult (User user) time pushShiftData) ->
+            div [ Html.Attributes.class (Pure.unit [ "1", "2" ]) ] []
+                :: snapshotElement (PushShiftResult (User user) time pushShiftData)
+                :: homeElement
+                :: githubLinkElement
+                :: userInfoElement (User user) time
+                :: [ chartsElement pushShiftData ]
+                |> div [ Html.Attributes.class "content", Html.Attributes.class Pure.grid ]
+
+        Snapshot (PushShiftResult (User user) time pushShiftData) ->
+            div [ Html.Attributes.class (Pure.unit [ "2", "3" ]) ] []
+                :: homeElement
+                :: githubLinkElement
+                :: userInfoElement (User user) time
+                :: [ chartsElement pushShiftData ]
+                |> div [ Html.Attributes.class "content", Html.Attributes.class Pure.grid ]
+
+
+snapshotElement : PushShiftResult -> Html Msg
+snapshotElement (PushShiftResult (User user) time pushShiftData) =
+    serializeSnapShot (PushShiftResult (User user) time pushShiftData)
+        |> Maybe.map
+            (\data ->
                 [ a
                     [ Html.Attributes.class Pure.button
-                    , Html.Attributes.class "button-reddit"
-                    , Html.Attributes.href <| "?snapshot=" ++ Maybe.withDefault "" (serializeSnapShot <| PushShiftResult user time pushShiftData)
+                    , Html.Attributes.class "button-links"
+                    , Html.Attributes.href <| "?snapshot=" ++ data
                     , Html.Attributes.target "_blank"
                     ]
                     [ i [ Html.Attributes.class "fas", Html.Attributes.class "fa-share-alt", Html.Attributes.class "fa-2x" ] [] ]
                 ]
-                :: [ chartConstructor pushShiftData
-                        |> List.map
-                            (\chart ->
-                                div
-                                    [ Html.Attributes.class (Pure.unit [ "1" ])
-                                    , Html.Attributes.class (Pure.unit [ "md", "1", "2" ])
-                                    ]
-                                    [ Chart.chart [] chart ]
-                            )
-                        |> div [ Html.Attributes.class Pure.grid ]
-                   ]
-                |> div []
+                    |> div [ Html.Attributes.class (Pure.unit [ "1", "6" ]) ]
+            )
+        |> Maybe.withDefault (div [ Html.Attributes.class (Pure.unit [ "1", "6" ]) ] [])
 
-        Snapshot (PushShiftResult user time pushShiftData) ->
-            div []
-                [ chartConstructor pushShiftData
-                        |> List.map
-                            (\chart ->
-                                div
-                                    [ Html.Attributes.class (Pure.unit [ "1" ])
-                                    , Html.Attributes.class (Pure.unit [ "md", "1", "2" ])
-                                    ]
-                                    [ Chart.chart [] chart ]
-                            )
-                        |> div [ Html.Attributes.class Pure.grid ]
-                   ]
+
+homeElement : Html Msg
+homeElement =
+    [ a
+        [ Html.Attributes.class Pure.button
+        , Html.Attributes.class "button-links"
+        , Html.Attributes.href <| "index.html"
+        ]
+        [ i [ Html.Attributes.class "fas", Html.Attributes.class "fa-home", Html.Attributes.class "fa-2x" ] [] ]
+    ]
+        |> div [ Html.Attributes.class (Pure.unit [ "1", "6" ]) ]
+
+
+githubLinkElement : Html Msg
+githubLinkElement =
+    [ a
+        [ Html.Attributes.class Pure.button
+        , Html.Attributes.class "button-links"
+        , Html.Attributes.href <| "https://github.com/DamienOReilly/reddit-status"
+        , Html.Attributes.target "_blank"
+        ]
+        [ i [ Html.Attributes.class "fab", Html.Attributes.class "fa-github", Html.Attributes.class "fa-2x" ] [] ]
+    ]
+        |> div [ Html.Attributes.class (Pure.unit [ "1", "6" ]) ]
+
+
+userInfoElement : User -> Time.Posix -> Html Msg
+userInfoElement (User user) time =
+    [ text <| "Statistics for user: "
+    , a
+        [ Html.Attributes.href <| Constants.redditUserUrl ++ user
+        , Html.Attributes.target "_blank"
+        ]
+        [ text user ]
+    , text <| " as of " ++ snapShotTimeFormatted time
+    ]
+        |> div [ Html.Attributes.class (Pure.unit [ "1", "1" ]), Html.Attributes.class "info-container" ]
+
+
+chartsElement : List PushShiftData -> Html Msg
+chartsElement pushShiftData =
+    chartConstructor pushShiftData
+        |> List.map
+            (\chart ->
+                div
+                    [ Html.Attributes.class (Pure.unit [ "1" ])
+                    , Html.Attributes.class (Pure.unit [ "lg", "1", "2" ])
+                    ]
+                    [ Chart.chart [] chart ]
+            )
+        |> div [ Html.Attributes.class Pure.grid ]
 
 
 getContentCountPerSubReddit : List PostCountSubReddit -> AxisData

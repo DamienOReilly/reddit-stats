@@ -1,9 +1,11 @@
-module Codecs exposing (PostCount, PostCountPerDay, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot)
+module Codecs exposing (PostCount, PostCountPerDay, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), snapShotTimeFormatted, deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot)
 
 import Base64
 import Bytes
 import Bytes.Decode as BytesDecode
 import Bytes.Encode as BytesEncode
+import DateFormat exposing (dayOfMonthSuffix, monthNameAbbreviated, yearNumber, hourNumber,minuteFixed, text, amPmLowercase, format)
+
 import Flate
 import Json.Decode as JsonDecode exposing (Decoder)
 import Json.Encode as JsonEncode
@@ -196,3 +198,22 @@ pushShiftResultToBase64 result =
         << JsonEncode.encode 0
     <|
         snapShotEncoder result
+
+snapShotTimeFormatted : Time.Posix -> String
+snapShotTimeFormatted time = 
+    DateFormat.format
+        [ dayOfMonthSuffix
+        , text " "
+        , monthNameAbbreviated
+        , text " "
+        , yearNumber
+        , text " "
+        , hourNumber
+        , text ":"
+        , minuteFixed
+        , text " "
+        , amPmLowercase
+        , text " UTC"
+        ]
+        Time.utc
+        time

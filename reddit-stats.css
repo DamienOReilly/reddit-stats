@@ -22,7 +22,6 @@
   line-height: 1em;
 }
 
-
 .button-reddit {
     color: white;
     border-radius: 4px;
@@ -30,10 +29,27 @@
     background: #ff717e;
 }
 
+.button-links {
+  color: black;
+  border-radius: 4px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  background-color: white;
+}
+
 .input-reddit {
   border-color: #ff717e;
   border-radius: 4px;
   outline: none;
+}
+
+.info-container {
+  text-align: center;
+}
+
+.content {
+  max-width: 1024px;
+  margin: 0 auto;
+  line-height: 1.6em;
 }
 
 .loader {
