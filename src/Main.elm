@@ -10,7 +10,7 @@ import Chartjs.DataSets.Line as LineData
 import Chartjs.Options as ChartOptions
 import Chartjs.Options.Legend as ChartLegend
 import Chartjs.Options.Title as ChartTitle
-import Codecs exposing (PostCount, PostCountPerDay, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
+import Codecs exposing (AxisData(..), AxisDataType(..), PostCount, PostCountPerX, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
 import Color exposing (Color)
 import Constants
 import DateFormat
@@ -61,10 +61,6 @@ type Model
     | Failure String
     | Success PushShiftResult
     | Snapshot PushShiftResult
-
-
-type AxisData
-    = AxisData (List String) (List Float)
 
 
 init : String -> ( Model, Cmd Msg )
@@ -321,7 +317,7 @@ getContentCountPerMonth count =
                             datePosix =
                                 millisToPosix <| x.date * 1000
                         in
-                        PostCountPerDay
+                        PostCountPerX
                             (DateFormat.format
                                 [ DateFormat.monthNameAbbreviated
                                 , DateFormat.text " "
@@ -343,6 +339,50 @@ getContentCountPerMonth count =
     AxisData labels values
 
 
+getAggregatedAxisData : List PushShiftData -> List AxisDataType
+getAggregatedAxisData data =
+    data
+        |> List.map
+            (\d ->
+                case d of
+                    RedditPostCount postCount ->
+                        [ PostCountPerYear <| getContentCountPerYear postCount, PostCountPerMonth <| getContentCountPerMonth postCount ]
+
+                    RedditSubmissionCount submissionCount ->
+                        [ SubmissionCountPerYear <| getContentCountPerYear submissionCount, SubmissionCountPerMonth <| getContentCountPerMonth submissionCount ]
+
+                    RedditPostCountPerSubReddit postCountPerSubReddit ->
+                        [ PostCountPerSubReddit <| getContentCountPerSubReddit postCountPerSubReddit ]
+
+                    RedditSubmissionCountPerSubReddit submissionCountPerSubReddit ->
+                        [ SubmissionCountPerReddit <| getContentCountPerSubReddit submissionCountPerSubReddit ]
+            )
+        |> List.concat
+
+
+makeBarOrLineChart : Chart.Type -> (AxisData -> String -> ChartCommon.PointProperty Color -> ChartCommon.PointProperty Color -> ChartData.Data) -> (List PostCount -> AxisData) -> List PostCount -> String -> ChartCommon.PointProperty Color -> ChartCommon.PointProperty Color -> String -> Chart.Chart
+makeBarOrLineChart chartType chartConstructorFn aggregatorFn count label colora color title =
+    Chart.defaultChart chartType
+        |> Chart.setData
+            (chartConstructorFn (aggregatorFn count)
+                label
+                colora
+                color
+            )
+        |> Chart.setOptions (chartOptions title)
+
+
+makePieChart : List PostCountSubReddit -> List Color -> String -> String -> Chart.Chart
+makePieChart count colors label title =
+    Chart.defaultChart Chart.Pie
+        |> Chart.setData
+            (constructPieChartData (getContentCountPerSubReddit count)
+                label
+                colors
+            )
+        |> Chart.setOptions (chartOptions title)
+
+
 chartConstructor : List PushShiftData -> List Chart.Chart
 chartConstructor data =
     data
@@ -350,64 +390,20 @@ chartConstructor data =
             (\d ->
                 case d of
                     RedditPostCount postCount ->
-                        [ Chart.defaultChart Chart.Bar
-                            |> Chart.setData
-                                (constructBarChartData (getContentCountPerYear postCount)
-                                    "Posts"
-                                    (ChartCommon.All Constants.colora2)
-                                    (ChartCommon.All Constants.color2)
-                                )
-                            |> Chart.setOptions (chartOptions "Posts per year")
-                        , Chart.defaultChart Chart.Line
-                            |> Chart.setData
-                                (constructLineChartData (getContentCountPerMonth postCount)
-                                    "Posts"
-                                    (ChartCommon.All Constants.colora3)
-                                    (ChartCommon.All Constants.color3)
-                                )
-                            |> Chart.setOptions (chartOptions <| "Posts per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
+                        [ makeBarOrLineChart Chart.Bar constructBarChartData getContentCountPerYear postCount "Posts" (ChartCommon.All Constants.colora2) (ChartCommon.All Constants.color2) "Posts per year"
+                        , makeBarOrLineChart Chart.Line constructLineChartData getContentCountPerMonth postCount "Posts" (ChartCommon.All Constants.colora3) (ChartCommon.All Constants.color3) ("Posts per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
                         ]
 
                     RedditSubmissionCount submissionCount ->
-                        [ Chart.defaultChart Chart.Bar
-                            |> Chart.setData
-                                (constructBarChartData (getContentCountPerYear submissionCount)
-                                    "Submissions"
-                                    (ChartCommon.All Constants.colora6)
-                                    (ChartCommon.All Constants.color6)
-                                )
-                            |> Chart.setOptions (chartOptions "Submissions per year")
-                        , Chart.defaultChart Chart.Line
-                            |> Chart.setData
-                                (constructLineChartData (getContentCountPerMonth submissionCount)
-                                    "Submissions"
-                                    (ChartCommon.All Constants.colora7)
-                                    (ChartCommon.All Constants.color7)
-                                )
-                            |> Chart.setOptions (chartOptions <| "Submissions per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
+                        [ makeBarOrLineChart Chart.Bar constructBarChartData getContentCountPerYear submissionCount "Submissions" (ChartCommon.All Constants.colora6) (ChartCommon.All Constants.color6) "Submissions per year"
+                        , makeBarOrLineChart Chart.Line constructLineChartData getContentCountPerMonth submissionCount "Submissions" (ChartCommon.All Constants.colora7) (ChartCommon.All Constants.color7) ("Submissions per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
                         ]
 
                     RedditPostCountPerSubReddit postCountPerSubReddit ->
-                        [ Chart.defaultChart Chart.Pie
-                            |> Chart.setData
-                                (constructPieChartData
-                                    (getContentCountPerSubReddit postCountPerSubReddit)
-                                    "Posts"
-                                    Constants.borderColors
-                                )
-                            |> Chart.setOptions (chartOptions <| "Posts per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
-                        ]
+                        [ makePieChart postCountPerSubReddit Constants.borderColors "Submissions" ("Posts per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")") ]
 
                     RedditSubmissionCountPerSubReddit submissionCountPerSubReddit ->
-                        [ Chart.defaultChart Chart.Pie
-                            |> Chart.setData
-                                (constructPieChartData
-                                    (getContentCountPerSubReddit submissionCountPerSubReddit)
-                                    "Submissions"
-                                    Constants.borderColors
-                                )
-                            |> Chart.setOptions (chartOptions <| "Submissions per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
-                        ]
+                        [ makePieChart submissionCountPerSubReddit Constants.borderColors "Submissions" ("Submissions per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")") ]
             )
         |> List.concat
 

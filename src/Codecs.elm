@@ -1,11 +1,10 @@
-module Codecs exposing (PostCount, PostCountPerDay, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), snapShotTimeFormatted, deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot)
+module Codecs exposing (AxisData(..), AxisDataType(..), PostCount, PostCountPerX, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
 
 import Base64
 import Bytes
 import Bytes.Decode as BytesDecode
 import Bytes.Encode as BytesEncode
-import DateFormat exposing (dayOfMonthSuffix, monthNameAbbreviated, yearNumber, hourNumber,minuteFixed, text, amPmLowercase, format)
-
+import DateFormat exposing (amPmLowercase, dayOfMonthSuffix, format, hourNumber, minuteFixed, monthNameAbbreviated, text, yearNumber)
 import Flate
 import Json.Decode as JsonDecode exposing (Decoder)
 import Json.Encode as JsonEncode
@@ -29,13 +28,26 @@ type PushShiftResult
     = PushShiftResult User Time.Posix (List PushShiftData)
 
 
+type AxisData
+    = AxisData (List String) (List Float)
+
+
+type AxisDataType
+    = PostCountPerYear AxisData
+    | SubmissionCountPerYear AxisData
+    | PostCountPerSubReddit AxisData
+    | SubmissionCountPerReddit AxisData
+    | PostCountPerMonth AxisData
+    | SubmissionCountPerMonth AxisData
+
+
 type alias PostCount =
     { date : Int
     , count : Int
     }
 
 
-type alias PostCountPerDay =
+type alias PostCountPerX =
     { date : String
     , count : Int
     }
@@ -199,8 +211,9 @@ pushShiftResultToBase64 result =
     <|
         snapShotEncoder result
 
+
 snapShotTimeFormatted : Time.Posix -> String
-snapShotTimeFormatted time = 
+snapShotTimeFormatted time =
     DateFormat.format
         [ dayOfMonthSuffix
         , text " "
