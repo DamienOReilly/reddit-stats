@@ -1,9 +1,10 @@
-module Codecs exposing (AxisData(..), AxisDataType(..), PostCount, PostCountPerX, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
+module Codecs exposing (AxisData(..), AxisDataType(..), IntermPostCountPerX, PushShiftData(..), PushShiftPostCount, PushShiftPostCountSubReddit, PushShiftResult(..), SnapshotResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
 
 import Base64
 import Bytes
 import Bytes.Decode as BytesDecode
 import Bytes.Encode as BytesEncode
+import Constants
 import DateFormat exposing (amPmLowercase, dayOfMonthSuffix, format, hourNumber, minuteFixed, monthNameAbbreviated, text, yearNumber)
 import Flate
 import Json.Decode as JsonDecode exposing (Decoder)
@@ -18,14 +19,18 @@ type User
 
 
 type PushShiftData
-    = RedditPostCountPerSubReddit (List PostCountSubReddit)
-    | RedditSubmissionCountPerSubReddit (List PostCountSubReddit)
-    | RedditPostCount (List PostCount)
-    | RedditSubmissionCount (List PostCount)
+    = RedditPostCountPerSubReddit (List PushShiftPostCountSubReddit)
+    | RedditSubmissionCountPerSubReddit (List PushShiftPostCountSubReddit)
+    | RedditPostCount (List PushShiftPostCount)
+    | RedditSubmissionCount (List PushShiftPostCount)
 
 
 type PushShiftResult
     = PushShiftResult User Time.Posix (List PushShiftData)
+
+
+type SnapshotResult
+    = SnapshotResult User Time.Posix (List AxisDataType)
 
 
 type AxisData
@@ -36,57 +41,41 @@ type AxisDataType
     = PostCountPerYear AxisData
     | SubmissionCountPerYear AxisData
     | PostCountPerSubReddit AxisData
-    | SubmissionCountPerReddit AxisData
+    | SubmissionCountPerSubReddit AxisData
     | PostCountPerMonth AxisData
     | SubmissionCountPerMonth AxisData
 
 
-type alias PostCount =
+type alias PushShiftPostCount =
     { date : Int
     , count : Int
     }
 
 
-type alias PostCountPerX =
+type alias IntermPostCountPerX =
     { date : String
     , count : Int
     }
 
 
-type alias PostCountSubReddit =
+type alias PushShiftPostCountSubReddit =
     { subreddit : String
     , count : Int
     }
 
 
-postCountDecoder : Decoder PostCount
+postCountDecoder : Decoder PushShiftPostCount
 postCountDecoder =
-    JsonDecode.map2 PostCount
+    JsonDecode.map2 PushShiftPostCount
         (JsonDecode.field "key" JsonDecode.int)
         (JsonDecode.field "doc_count" JsonDecode.int)
 
 
-postCountEncoder : PostCount -> JsonEncode.Value
-postCountEncoder postCount =
-    JsonEncode.object
-        [ ( "key", JsonEncode.int postCount.date )
-        , ( "doc_count", JsonEncode.int postCount.count )
-        ]
-
-
-postCountSubRedditDecoder : Decoder PostCountSubReddit
+postCountSubRedditDecoder : Decoder PushShiftPostCountSubReddit
 postCountSubRedditDecoder =
-    JsonDecode.map2 PostCountSubReddit
+    JsonDecode.map2 PushShiftPostCountSubReddit
         (JsonDecode.field "key" JsonDecode.string)
         (JsonDecode.field "doc_count" JsonDecode.int)
-
-
-postCountSubRedditEncoder : PostCountSubReddit -> JsonEncode.Value
-postCountSubRedditEncoder postCountSubReddit =
-    JsonEncode.object
-        [ ( "key", JsonEncode.string postCountSubReddit.subreddit )
-        , ( "doc_count", JsonEncode.int postCountSubReddit.count )
-        ]
 
 
 pushShiftAggDecoder : Decoder a -> String -> Decoder (List a)
@@ -94,98 +83,118 @@ pushShiftAggDecoder decoder aggregator =
     JsonDecode.map identity (JsonDecode.field "aggs" (JsonDecode.field aggregator (JsonDecode.list decoder)))
 
 
-pushShiftAggEncoder : (a -> JsonEncode.Value) -> List a -> String -> JsonEncode.Value
-pushShiftAggEncoder encoderFn pushShiftData aggregator =
+axisDataEncoder : AxisData -> JsonEncode.Value
+axisDataEncoder (AxisData x y) =
     JsonEncode.object
-        [ ( "aggs"
-          , JsonEncode.object
-                [ ( aggregator, JsonEncode.list encoderFn pushShiftData )
-                ]
-          )
+        [ ( "x", JsonEncode.list JsonEncode.string x )
+        , ( "y", JsonEncode.list JsonEncode.float y )
         ]
 
 
-pushShiftEncoder : List PushShiftData -> JsonEncode.Value
-pushShiftEncoder pushShiftData =
-    pushShiftData
-        |> List.map
-            (\data ->
-                case data of
-                    RedditPostCount count ->
-                        ( "post_count", pushShiftAggEncoder postCountEncoder count "created_utc" )
-
-                    RedditSubmissionCount count ->
-                        ( "submission_count", pushShiftAggEncoder postCountEncoder count "created_utc" )
-
-                    RedditPostCountPerSubReddit count ->
-                        ( "post_count_per_subreddit", pushShiftAggEncoder postCountSubRedditEncoder count "subreddit" )
-
-                    RedditSubmissionCountPerSubReddit count ->
-                        ( "submission_count_per_subreddit", pushShiftAggEncoder postCountSubRedditEncoder count "subreddit" )
-            )
-        |> JsonEncode.object
+axisDataDecoder : Decoder AxisData
+axisDataDecoder =
+    JsonDecode.map2 AxisData
+        (JsonDecode.field "x" <| JsonDecode.list JsonDecode.string)
+        (JsonDecode.field "y" <| JsonDecode.list JsonDecode.float)
 
 
 {-| Would like to now if its possible to do this without the intermediate type aliases
 -}
-type alias IntermediatePushShiftData =
-    { postCountPerSubReddit : List PostCountSubReddit
-    , submissionCountPerSubReddit : List PostCountSubReddit
-    , postCount : List PostCount
-    , submissionCount : List PostCount
+snapshotDataEncoder : List AxisDataType -> JsonEncode.Value
+snapshotDataEncoder axisDataList =
+    axisDataList
+        |> List.map
+            (\data ->
+                case data of
+                    PostCountPerYear count ->
+                        ( "py", axisDataEncoder count )
+
+                    PostCountPerMonth count ->
+                        ( "pm", axisDataEncoder count )
+
+                    SubmissionCountPerYear count ->
+                        ( "sy", axisDataEncoder count )
+
+                    SubmissionCountPerMonth count ->
+                        ( "sm", axisDataEncoder count )
+
+                    PostCountPerSubReddit count ->
+                        ( "ps", axisDataEncoder count )
+
+                    SubmissionCountPerSubReddit count ->
+                        ( "ss", axisDataEncoder count )
+            )
+        |> JsonEncode.object
+
+
+type alias IntermediateSnapshotData =
+    { postCountPerSubReddit : AxisData
+    , submissionCountPerSubReddit : AxisData
+    , postCountPerYear : AxisData
+    , postCountPerMonth : AxisData
+    , submissionCountPerYear : AxisData
+    , submissionCountPerMonth : AxisData
     }
 
 
-pushShiftDecoder : Decoder (List PushShiftData)
-pushShiftDecoder =
-    JsonDecode.map4 IntermediatePushShiftData
-        (JsonDecode.field "post_count_per_subreddit" (pushShiftAggDecoder postCountSubRedditDecoder "subreddit"))
-        (JsonDecode.field "submission_count_per_subreddit" (pushShiftAggDecoder postCountSubRedditDecoder "subreddit"))
-        (JsonDecode.field "post_count" (pushShiftAggDecoder postCountDecoder "created_utc"))
-        (JsonDecode.field "submission_count" (pushShiftAggDecoder postCountDecoder "created_utc"))
+snapshotDataDecoder : Decoder (List AxisDataType)
+snapshotDataDecoder =
+    JsonDecode.map6 IntermediateSnapshotData
+        (JsonDecode.field "ps" axisDataDecoder)
+        (JsonDecode.field "ss" axisDataDecoder)
+        (JsonDecode.field "py" axisDataDecoder)
+        (JsonDecode.field "pm" axisDataDecoder)
+        (JsonDecode.field "sy" axisDataDecoder)
+        (JsonDecode.field "sm" axisDataDecoder)
+
         |> JsonDecode.map
             (\x ->
-                [ RedditPostCountPerSubReddit x.postCountPerSubReddit
-                , RedditSubmissionCountPerSubReddit x.submissionCountPerSubReddit
-                , RedditPostCount x.postCount
-                , RedditSubmissionCount x.submissionCount
+                [ PostCountPerSubReddit x.postCountPerSubReddit
+                , SubmissionCountPerSubReddit x.submissionCountPerSubReddit
+                , PostCountPerYear x.postCountPerYear
+                , PostCountPerMonth x.postCountPerMonth
+                , SubmissionCountPerYear x.submissionCountPerYear
+                , SubmissionCountPerMonth x.submissionCountPerMonth
                 ]
             )
 
 
-snapShotEncoder : PushShiftResult -> JsonEncode.Value
-snapShotEncoder (PushShiftResult (User user) time pushShiftData) =
+snapShotEncoder : SnapshotResult -> JsonEncode.Value
+snapShotEncoder (SnapshotResult (User user) time data) =
     JsonEncode.object
-        [ ( "user", JsonEncode.string user )
-        , ( "snapshot_time", JsonEncode.int <| Time.posixToMillis time )
-        , ( "data", pushShiftEncoder pushShiftData )
+        [ ( "v", JsonEncode.int Constants.version )
+        , ( "u", JsonEncode.string user )
+        , ( "t", JsonEncode.int <| Time.posixToMillis time )
+        , ( "d", snapshotDataEncoder data )
         ]
 
 
-type alias IntermediatePushShiftResult =
-    { user : String
+type alias IntermediateSnapshotResult =
+    { version : Int
+    , user : String
     , snapShotTime : Int
-    , data : List PushShiftData
+    , data : List AxisDataType
     }
 
 
-snapShotDecoder : Decoder PushShiftResult
+snapShotDecoder : Decoder SnapshotResult
 snapShotDecoder =
-    JsonDecode.map3 IntermediatePushShiftResult
-        (JsonDecode.field "user" JsonDecode.string)
-        (JsonDecode.field "snapshot_time" JsonDecode.int)
-        (JsonDecode.field "data" pushShiftDecoder)
+    JsonDecode.map4 IntermediateSnapshotResult
+        (JsonDecode.field "v" JsonDecode.int)
+        (JsonDecode.field "u" JsonDecode.string)
+        (JsonDecode.field "t" JsonDecode.int)
+        (JsonDecode.field "d" snapshotDataDecoder)
         |> JsonDecode.map
-            (\x -> PushShiftResult (User x.user) (Time.millisToPosix x.snapShotTime) x.data)
+            (\x -> SnapshotResult (User x.user) (Time.millisToPosix x.snapShotTime) x.data)
 
 
-deserializeSnapShot : String -> Maybe PushShiftResult
+deserializeSnapShot : String -> Maybe SnapshotResult
 deserializeSnapShot input =
     UrlBase64.decode base64ToPushShiftResult input
         |> Result.toMaybe
 
 
-base64ToPushShiftResult : String -> Result String PushShiftResult
+base64ToPushShiftResult : String -> Result String SnapshotResult
 base64ToPushShiftResult input =
     Base64.toBytes input
         |> Maybe.andThen Flate.inflate
@@ -194,14 +203,14 @@ base64ToPushShiftResult input =
         |> Result.fromMaybe "Bad Data"
 
 
-serializeSnapShot : PushShiftResult -> Maybe String
+serializeSnapShot : SnapshotResult -> Maybe String
 serializeSnapShot result =
-    UrlBase64.encode pushShiftResultToBase64 result
+    UrlBase64.encode snapshotToBase64 result
         |> Result.toMaybe
 
 
-pushShiftResultToBase64 : PushShiftResult -> Result String String
-pushShiftResultToBase64 result =
+snapshotToBase64 : SnapshotResult -> Result String String
+snapshotToBase64 result =
     Result.fromMaybe "Bad data"
         << Base64.fromBytes
         << Flate.deflateWithOptions (Flate.Dynamic (Flate.WithWindowSize LZ77.maxWindowSize))
@@ -214,7 +223,7 @@ pushShiftResultToBase64 result =
 
 snapShotTimeFormatted : Time.Posix -> String
 snapShotTimeFormatted time =
-    DateFormat.format
+    format
         [ dayOfMonthSuffix
         , text " "
         , monthNameAbbreviated

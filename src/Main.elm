@@ -10,7 +10,7 @@ import Chartjs.DataSets.Line as LineData
 import Chartjs.Options as ChartOptions
 import Chartjs.Options.Legend as ChartLegend
 import Chartjs.Options.Title as ChartTitle
-import Codecs exposing (AxisData(..), AxisDataType(..), PostCount, PostCountPerX, PostCountSubReddit, PushShiftData(..), PushShiftResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
+import Codecs exposing (AxisData(..), AxisDataType(..), IntermPostCountPerX, PushShiftData(..), PushShiftPostCount, PushShiftPostCountSubReddit, PushShiftResult(..), SnapshotResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
 import Color exposing (Color)
 import Constants
 import DateFormat
@@ -60,7 +60,7 @@ type Model
     | Loading
     | Failure String
     | Success PushShiftResult
-    | Snapshot PushShiftResult
+    | Snapshot SnapshotResult
 
 
 init : String -> ( Model, Cmd Msg )
@@ -69,10 +69,10 @@ init urlString =
         |> Maybe.andThen extractSnapShotArgument
         |> Maybe.map deserializeSnapShot
         |> Maybe.map
-            (\maybePushShiftData ->
-                case maybePushShiftData of
-                    Just (PushShiftResult user time data) ->
-                        ( Snapshot (PushShiftResult user time data), Cmd.none )
+            (\maybeSnapshotResult ->
+                case maybeSnapshotResult of
+                    Just (SnapshotResult user time data) ->
+                        ( Snapshot (SnapshotResult user time data), Cmd.none )
 
                     Nothing ->
                         ( Failure "Bad snaphot data.", Cmd.none )
@@ -159,32 +159,36 @@ view model =
                 |> div [ Html.Attributes.class "content", Html.Attributes.class Pure.grid ]
 
         Success (PushShiftResult (User user) time pushShiftData) ->
+            let
+                allAxisData =
+                    getAggregatedAxisData pushShiftData
+            in
             div [ Html.Attributes.class (Pure.unit [ "1", "2" ]) ] []
-                :: snapshotElement (PushShiftResult (User user) time pushShiftData)
+                :: snapshotElement (SnapshotResult (User user) time allAxisData)
                 :: homeElement
                 :: githubLinkElement
                 :: userInfoElement (User user) time
-                :: [ chartsElement pushShiftData ]
+                :: [ chartsElement allAxisData ]
                 |> div [ Html.Attributes.class "content", Html.Attributes.class Pure.grid ]
 
-        Snapshot (PushShiftResult (User user) time pushShiftData) ->
+        Snapshot (SnapshotResult (User user) time allAxisData) ->
             div [ Html.Attributes.class (Pure.unit [ "2", "3" ]) ] []
                 :: homeElement
                 :: githubLinkElement
                 :: userInfoElement (User user) time
-                :: [ chartsElement pushShiftData ]
+                :: [ chartsElement allAxisData ]
                 |> div [ Html.Attributes.class "content", Html.Attributes.class Pure.grid ]
 
 
-snapshotElement : PushShiftResult -> Html Msg
-snapshotElement (PushShiftResult (User user) time pushShiftData) =
-    serializeSnapShot (PushShiftResult (User user) time pushShiftData)
+snapshotElement : SnapshotResult -> Html Msg
+snapshotElement (SnapshotResult (User user) time data) =
+    serializeSnapShot (SnapshotResult (User user) time data)
         |> Maybe.map
-            (\data ->
+            (\serialized ->
                 [ a
                     [ Html.Attributes.class Pure.button
                     , Html.Attributes.class "button-links"
-                    , Html.Attributes.href <| "?snapshot=" ++ data
+                    , Html.Attributes.href <| "?snapshot=" ++ serialized
                     , Html.Attributes.target "_blank"
                     ]
                     [ i [ Html.Attributes.class "fas", Html.Attributes.class "fa-share-alt", Html.Attributes.class "fa-2x" ] [] ]
@@ -232,9 +236,9 @@ userInfoElement (User user) time =
         |> div [ Html.Attributes.class (Pure.unit [ "1", "1" ]), Html.Attributes.class "info-container" ]
 
 
-chartsElement : List PushShiftData -> Html Msg
-chartsElement pushShiftData =
-    chartConstructor pushShiftData
+chartsElement : List AxisDataType -> Html Msg
+chartsElement axisData =
+    chartConstructor axisData
         |> List.map
             (\chart ->
                 div
@@ -246,7 +250,7 @@ chartsElement pushShiftData =
         |> div [ Html.Attributes.class Pure.grid ]
 
 
-getContentCountPerSubReddit : List PostCountSubReddit -> AxisData
+getContentCountPerSubReddit : List PushShiftPostCountSubReddit -> AxisData
 getContentCountPerSubReddit count =
     let
         totalSum =
@@ -266,7 +270,7 @@ getContentCountPerSubReddit count =
 
         final =
             if difference > 0 then
-                filtered ++ [ PostCountSubReddit "All others" (totalSum - topSum) ]
+                filtered ++ [ PushShiftPostCountSubReddit "All others" (totalSum - topSum) ]
 
             else
                 filtered
@@ -280,7 +284,7 @@ getContentCountPerSubReddit count =
     AxisData labels values
 
 
-getContentCountPerYear : List PostCount -> AxisData
+getContentCountPerYear : List PushShiftPostCount -> AxisData
 getContentCountPerYear count =
     let
         result =
@@ -288,12 +292,12 @@ getContentCountPerYear count =
                 |> List.filter (\x -> x.count > 0)
                 |> List.map
                     (\x ->
-                        PostCount (toYear utc <| millisToPosix <| x.date * 1000) x.count
+                        PushShiftPostCount (toYear utc <| millisToPosix <| x.date * 1000) x.count
                     )
                 |> Dict.Extra.groupBy .date
                 >> Dict.map (\_ -> List.map .count >> List.sum)
                 >> Dict.toList
-                >> List.map (\( date, aggCount ) -> PostCount date aggCount)
+                >> List.map (\( date, aggCount ) -> PushShiftPostCount date aggCount)
 
         values =
             List.map (.count >> toFloat) result
@@ -304,7 +308,7 @@ getContentCountPerYear count =
     AxisData labels values
 
 
-getContentCountPerMonth : List PostCount -> AxisData
+getContentCountPerMonth : List PushShiftPostCount -> AxisData
 getContentCountPerMonth count =
     let
         result =
@@ -317,7 +321,7 @@ getContentCountPerMonth count =
                             datePosix =
                                 millisToPosix <| x.date * 1000
                         in
-                        PostCountPerX
+                        IntermPostCountPerX
                             (DateFormat.format
                                 [ DateFormat.monthNameAbbreviated
                                 , DateFormat.text " "
@@ -346,25 +350,29 @@ getAggregatedAxisData data =
             (\d ->
                 case d of
                     RedditPostCount postCount ->
-                        [ PostCountPerYear <| getContentCountPerYear postCount, PostCountPerMonth <| getContentCountPerMonth postCount ]
+                        [ PostCountPerYear <| getContentCountPerYear postCount
+                        , PostCountPerMonth <| getContentCountPerMonth postCount
+                        ]
 
                     RedditSubmissionCount submissionCount ->
-                        [ SubmissionCountPerYear <| getContentCountPerYear submissionCount, SubmissionCountPerMonth <| getContentCountPerMonth submissionCount ]
+                        [ SubmissionCountPerYear <| getContentCountPerYear submissionCount
+                        , SubmissionCountPerMonth <| getContentCountPerMonth submissionCount
+                        ]
 
                     RedditPostCountPerSubReddit postCountPerSubReddit ->
                         [ PostCountPerSubReddit <| getContentCountPerSubReddit postCountPerSubReddit ]
 
                     RedditSubmissionCountPerSubReddit submissionCountPerSubReddit ->
-                        [ SubmissionCountPerReddit <| getContentCountPerSubReddit submissionCountPerSubReddit ]
+                        [ SubmissionCountPerSubReddit <| getContentCountPerSubReddit submissionCountPerSubReddit ]
             )
         |> List.concat
 
 
-makeBarOrLineChart : Chart.Type -> (AxisData -> String -> ChartCommon.PointProperty Color -> ChartCommon.PointProperty Color -> ChartData.Data) -> (List PostCount -> AxisData) -> List PostCount -> String -> ChartCommon.PointProperty Color -> ChartCommon.PointProperty Color -> String -> Chart.Chart
-makeBarOrLineChart chartType chartConstructorFn aggregatorFn count label colora color title =
+makeBarOrLineChart : Chart.Type -> (AxisData -> String -> ChartCommon.PointProperty Color -> ChartCommon.PointProperty Color -> ChartData.Data) -> AxisData -> String -> ChartCommon.PointProperty Color -> ChartCommon.PointProperty Color -> String -> Chart.Chart
+makeBarOrLineChart chartType chartConstructorFn axisData label colora color title =
     Chart.defaultChart chartType
         |> Chart.setData
-            (chartConstructorFn (aggregatorFn count)
+            (chartConstructorFn axisData
                 label
                 colora
                 color
@@ -372,40 +380,41 @@ makeBarOrLineChart chartType chartConstructorFn aggregatorFn count label colora 
         |> Chart.setOptions (chartOptions title)
 
 
-makePieChart : List PostCountSubReddit -> List Color -> String -> String -> Chart.Chart
-makePieChart count colors label title =
+makePieChart : AxisData -> List Color -> String -> String -> Chart.Chart
+makePieChart axisData colors label title =
     Chart.defaultChart Chart.Pie
         |> Chart.setData
-            (constructPieChartData (getContentCountPerSubReddit count)
+            (constructPieChartData axisData
                 label
                 colors
             )
         |> Chart.setOptions (chartOptions title)
 
 
-chartConstructor : List PushShiftData -> List Chart.Chart
+chartConstructor : List AxisDataType -> List Chart.Chart
 chartConstructor data =
     data
         |> List.map
             (\d ->
                 case d of
-                    RedditPostCount postCount ->
-                        [ makeBarOrLineChart Chart.Bar constructBarChartData getContentCountPerYear postCount "Posts" (ChartCommon.All Constants.colora2) (ChartCommon.All Constants.color2) "Posts per year"
-                        , makeBarOrLineChart Chart.Line constructLineChartData getContentCountPerMonth postCount "Posts" (ChartCommon.All Constants.colora3) (ChartCommon.All Constants.color3) ("Posts per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
-                        ]
+                    PostCountPerYear count ->
+                        makeBarOrLineChart Chart.Bar constructBarChartData count "Posts" (ChartCommon.All Constants.colora2) (ChartCommon.All Constants.color2) "Posts per year"
 
-                    RedditSubmissionCount submissionCount ->
-                        [ makeBarOrLineChart Chart.Bar constructBarChartData getContentCountPerYear submissionCount "Submissions" (ChartCommon.All Constants.colora6) (ChartCommon.All Constants.color6) "Submissions per year"
-                        , makeBarOrLineChart Chart.Line constructLineChartData getContentCountPerMonth submissionCount "Submissions" (ChartCommon.All Constants.colora7) (ChartCommon.All Constants.color7) ("Submissions per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
-                        ]
+                    PostCountPerMonth count ->
+                        makeBarOrLineChart Chart.Line constructLineChartData count "Posts" (ChartCommon.All Constants.colora3) (ChartCommon.All Constants.color3) ("Posts per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
 
-                    RedditPostCountPerSubReddit postCountPerSubReddit ->
-                        [ makePieChart postCountPerSubReddit Constants.borderColors "Submissions" ("Posts per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")") ]
+                    SubmissionCountPerYear count ->
+                        makeBarOrLineChart Chart.Bar constructBarChartData count "Submissions" (ChartCommon.All Constants.colora6) (ChartCommon.All Constants.color6) "Submissions per year"
 
-                    RedditSubmissionCountPerSubReddit submissionCountPerSubReddit ->
-                        [ makePieChart submissionCountPerSubReddit Constants.borderColors "Submissions" ("Submissions per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")") ]
+                    SubmissionCountPerMonth count ->
+                        makeBarOrLineChart Chart.Line constructLineChartData count "Submissions" (ChartCommon.All Constants.colora7) (ChartCommon.All Constants.color7) ("Submissions per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
+
+                    PostCountPerSubReddit count ->
+                        makePieChart count Constants.borderColors "Submissions" ("Posts per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
+
+                    SubmissionCountPerSubReddit count ->
+                        makePieChart count Constants.borderColors "Submissions" ("Submissions per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
             )
-        |> List.concat
 
 
 chartOptions : String -> ChartOptions.Options

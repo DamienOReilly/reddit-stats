@@ -28,6 +28,7 @@ module Constants exposing
     , pushShiftServer
     , redditUserUrl
     , topSubreddits
+    , version
     )
 
 import Color exposing (Color, rgb, rgba)
@@ -53,6 +54,10 @@ lastNumberOfMonthsForLineGraph =
 -}
 httpTimeout =
     120 * 1000
+
+
+version =
+    1
 
 
 color1 =
