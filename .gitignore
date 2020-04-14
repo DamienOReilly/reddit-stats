@@ -6,3 +6,5 @@ repl-temp-*
 elm.js
 elm.min.js
 .vscode
+dist
+staging

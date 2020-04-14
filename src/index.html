@@ -1,18 +1,24 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Reddit User Stats.</title>
+  <title>Reddit User Statistics.</title>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="title" content="Reddit User Statistics">
+  <meta name="description" content="Graph up some reddit user statistics with data retrieved from the PushShift API.">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="manifest" href="site.webmanifest">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/combine/npm/purecss@1.0.1/build/pure-min.css,npm/purecss@1.0.1/build/grids-responsive-min.css,npm/@fortawesome/fontawesome-free@5.13.0/css/all.min.css">
-  <link rel="stylesheet" href="reddit-stats.css">
+  <link rel="stylesheet" href="{{{REDDIT-STATS-CSS}}}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.13.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.bundle.min.js"></script>
 </head>
 <body>
   <main></main>
-  <script src ="webcomponent/chart.js"></script>
-  <script src="elm.js"></script>
+  <script src="{{{CHART-JS}}}"></script>
+  <script src="{{{ELM-JS}}}"></script>
   <script>
     var app = Elm.Main.init({
       node: document.querySelector('main'),
