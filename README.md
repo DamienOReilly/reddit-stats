@@ -1,1 +1,1 @@
-# reddit-status
+# reddit-stats
