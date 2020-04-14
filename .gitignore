@@ -5,3 +5,4 @@ repl-temp-*
 .idea
 elm.js
 elm.min.js
+.vscode
