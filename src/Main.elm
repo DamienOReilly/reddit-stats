@@ -18,7 +18,7 @@ import Debug
 import Dict
 import Dict.Extra
 import Hotkeys exposing (onEnterSend)
-import Html exposing (Html, a, button, div, h3, i, input, text)
+import Html exposing (Html, a, button, div, h1, i, input, p, span, text)
 import Html.Attributes exposing (placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Http
@@ -116,27 +116,26 @@ subscriptions _ =
 
 inputName : User -> Html Msg
 inputName (User user) =
-    div [ Html.Attributes.class Pure.grid, Html.Attributes.class (Pure.unit [ "1", "1" ]) ] <|
-        [ div [ Html.Attributes.class (Pure.unit [ "6", "24" ]) ] []
-        , input
-            [ Html.Attributes.autofocus True
-            , Html.Attributes.class "input-reddit"
-            , Html.Attributes.class (Pure.unit [ "8", "24" ])
-            , placeholder "User to search for."
-            , value user
-            , onInput <| ChangeInput << (\u -> User u)
-            , onEnterSend <| Search << (\u -> User u)
+    div [ Html.Attributes.class "splash", Html.Attributes.class (Pure.unit [ "1", "1" ]) ]
+        [ h1 [ Html.Attributes.class "splash-head" ] [ text "Reddit User Statistics" ]
+        , p [ Html.Attributes.class "splash-subhead" ] [ text "All data retrieved from the PushShift API is processed directly on the browser. No interim server is used." ]
+        , div [ Html.Attributes.class "input-container", Html.Attributes.class Pure.grid, Html.Attributes.class (Pure.unit [ "1", "1" ]) ] <|
+            [ input
+                [ Html.Attributes.autofocus True
+                , Html.Attributes.class "input-reddit"
+                , placeholder "User to get stats on..."
+                , value user
+                , onInput <| ChangeInput << (\u -> User u)
+                , onEnterSend <| Search << (\u -> User u)
+                ]
+                []
+            , button
+                [ Html.Attributes.class Pure.button
+                , Html.Attributes.class "button-reddit"
+                , onClick (Search <| User user)
+                ]
+                [ i [ Html.Attributes.class "fab", Html.Attributes.class "fa-reddit-alien", Html.Attributes.class "fa-2x" ] [] ]
             ]
-            []
-        , div [ Html.Attributes.class (Pure.unit [ "1", "24" ]) ] []
-        , button
-            [ Html.Attributes.class Pure.button
-            , Html.Attributes.class "button-reddit"
-            , Html.Attributes.class (Pure.unit [ "3", "24" ])
-            , onClick (Search <| User user)
-            ]
-            [ i [ Html.Attributes.class "fab", Html.Attributes.class "fa-reddit-alien", Html.Attributes.class "fa-2x" ] [] ]
-        , div [ Html.Attributes.class (Pure.unit [ "6", "24" ]) ] []
         ]
 
 
@@ -150,7 +149,9 @@ view model =
                 |> div [ Html.Attributes.class "content", Html.Attributes.class Pure.grid ]
 
         Loading ->
-            div [ Html.Attributes.class Pure.grid, Html.Attributes.class "loader" ] []
+            div [ Html.Attributes.class Pure.grid, Html.Attributes.class "loader-container" ]
+                [ span [ Html.Attributes.class "loader" ] []
+                ]
 
         Failure message ->
             div [ Html.Attributes.class (Pure.unit [ "2", "3" ]) ] []
@@ -416,7 +417,6 @@ chartConstructor data =
                     SubmissionCountPerSubReddit count ->
                         makePieChart count Constants.borderColors "Submissions" ("Submissions per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
             )
-
 
 
 chartOptions : String -> ChartOptions.Options
