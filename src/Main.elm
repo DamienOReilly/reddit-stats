@@ -116,7 +116,7 @@ subscriptions _ =
 
 inputName : User -> Html Msg
 inputName (User user) =
-    div [ Html.Attributes.class Pure.grid, Html.Attributes.class (Pure.unit [ "5", "6" ]) ] <|
+    div [ Html.Attributes.class Pure.grid, Html.Attributes.class (Pure.unit [ "1", "1" ]) ] <|
         [ div [ Html.Attributes.class (Pure.unit [ "6", "24" ]) ] []
         , input
             [ Html.Attributes.autofocus True
@@ -128,6 +128,7 @@ inputName (User user) =
             , onEnterSend <| Search << (\u -> User u)
             ]
             []
+        , div [ Html.Attributes.class (Pure.unit [ "1", "24" ]) ] []
         , button
             [ Html.Attributes.class Pure.button
             , Html.Attributes.class "button-reddit"
@@ -135,7 +136,7 @@ inputName (User user) =
             , onClick (Search <| User user)
             ]
             [ i [ Html.Attributes.class "fab", Html.Attributes.class "fa-reddit-alien", Html.Attributes.class "fa-2x" ] [] ]
-        , div [ Html.Attributes.class (Pure.unit [ "7", "24" ]) ] []
+        , div [ Html.Attributes.class (Pure.unit [ "6", "24" ]) ] []
         ]
 
 
@@ -415,6 +416,7 @@ chartConstructor data =
                     SubmissionCountPerSubReddit count ->
                         makePieChart count Constants.borderColors "Submissions" ("Submissions per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
             )
+
 
 
 chartOptions : String -> ChartOptions.Options
