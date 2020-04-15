@@ -23,6 +23,7 @@ module Constants exposing
     , colora7
     , colora8
     , colora9
+    , githubRepoUrl
     , httpTimeout
     , lastNumberOfMonthsForLineGraph
     , pushShiftServer
@@ -40,6 +41,10 @@ pushShiftServer =
 
 redditUserUrl =
     "https://www.reddit.com/user/"
+
+
+githubRepoUrl =
+    "https://github.com/DamienOReilly/reddit-status"
 
 
 topSubreddits =

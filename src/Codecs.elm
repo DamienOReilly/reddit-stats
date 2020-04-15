@@ -146,7 +146,6 @@ snapshotDataDecoder =
         (JsonDecode.field "pm" axisDataDecoder)
         (JsonDecode.field "sy" axisDataDecoder)
         (JsonDecode.field "sm" axisDataDecoder)
-
         |> JsonDecode.map
             (\x ->
                 [ PostCountPerSubReddit x.postCountPerSubReddit
