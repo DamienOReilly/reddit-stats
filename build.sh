@@ -11,7 +11,7 @@ rm staging/*
 cp src/assets/* dist/
 
 elm make src/Main.elm --optimize --output=staging/elm.js
-terser elm.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | terser --mangle --output=staging/elm.min.js
+terser staging/elm.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | terser --mangle --output=staging/elm.min.js
 ELM_MD5=$(openssl md5 -r staging/elm.min.js | awk '{print $1}')
 ELM_STAGING=elm-min-$ELM_MD5.js
 cp staging/elm.min.js dist/$ELM_STAGING
@@ -23,7 +23,7 @@ cp staging/chart.min.js  dist/$CHART_STAGING
 
 uglifycss src/reddit-stats.css --output staging/reddit-stats.min.css
 REDDIT_STATS_MD5=$(openssl md5 -r staging/reddit-stats.min.css| awk '{print $1}')
-REDDIT_STATS_STAGING=reddit-stats-$REDDIT_STATS_MD5.css
+REDDIT_STATS_STAGING=reddit-stats-min-$REDDIT_STATS_MD5.css
 cp staging/reddit-stats.min.css  dist/$REDDIT_STATS_STAGING
 
 cp src/index.html dist/
