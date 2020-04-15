@@ -9,7 +9,7 @@ import Chartjs.DataSets.Line as LineData
 import Chartjs.Options as ChartOptions
 import Chartjs.Options.Legend as ChartLegend
 import Chartjs.Options.Title as ChartTitle
-import Codecs exposing (AxisData(..), AxisDataType(..), IntermPostCountPerX, PushShiftData(..), PushShiftPostCount, PushShiftPostCountSubReddit)
+import Codecs exposing (AxisData(..), AxisDataType(..), IntermCountPerX, PushShiftCount, PushShiftCountSubReddit, PushShiftData(..))
 import Color exposing (Color)
 import Constants
 import DateFormat
@@ -20,7 +20,7 @@ import Time exposing (Month(..), millisToPosix, toYear, utc)
 import Utils exposing (descending, sortByWith)
 
 
-getContentCountPerSubReddit : List PushShiftPostCountSubReddit -> AxisData
+getContentCountPerSubReddit : List PushShiftCountSubReddit -> AxisData
 getContentCountPerSubReddit count =
     let
         totalSum =
@@ -40,7 +40,7 @@ getContentCountPerSubReddit count =
 
         final =
             if difference > 0 then
-                filtered ++ [ PushShiftPostCountSubReddit "All others" (totalSum - topSum) ]
+                filtered ++ [ PushShiftCountSubReddit "All others" (totalSum - topSum) ]
 
             else
                 filtered
@@ -54,7 +54,7 @@ getContentCountPerSubReddit count =
     AxisData labels values
 
 
-getContentCountPerYear : List PushShiftPostCount -> AxisData
+getContentCountPerYear : List PushShiftCount -> AxisData
 getContentCountPerYear count =
     let
         result =
@@ -62,12 +62,12 @@ getContentCountPerYear count =
                 |> List.filter (\x -> x.count > 0)
                 |> List.map
                     (\x ->
-                        PushShiftPostCount (toYear utc <| millisToPosix <| x.date * 1000) x.count
+                        PushShiftCount (toYear utc <| millisToPosix <| x.date * 1000) x.count
                     )
                 |> Dict.Extra.groupBy .date
                 >> Dict.map (\_ -> List.map .count >> List.sum)
                 >> Dict.toList
-                >> List.map (\( date, aggCount ) -> PushShiftPostCount date aggCount)
+                >> List.map (\( date, aggCount ) -> PushShiftCount date aggCount)
 
         values =
             List.map (.count >> toFloat) result
@@ -78,7 +78,7 @@ getContentCountPerYear count =
     AxisData labels values
 
 
-getContentCountPerMonth : List PushShiftPostCount -> AxisData
+getContentCountPerMonth : List PushShiftCount -> AxisData
 getContentCountPerMonth count =
     let
         result =
@@ -91,7 +91,7 @@ getContentCountPerMonth count =
                             datePosix =
                                 millisToPosix <| x.date * 1000
                         in
-                        IntermPostCountPerX
+                        IntermCountPerX
                             (DateFormat.format
                                 [ DateFormat.monthNameAbbreviated
                                 , DateFormat.text " "
@@ -119,21 +119,21 @@ getAggregatedAxisData data =
         |> List.map
             (\d ->
                 case d of
-                    RedditPostCount postCount ->
-                        [ PostCountPerYear <| getContentCountPerYear postCount
-                        , PostCountPerMonth <| getContentCountPerMonth postCount
+                    RedditCommentCount count ->
+                        [ CommentCountPerYear <| getContentCountPerYear count
+                        , CommentCountPerMonth <| getContentCountPerMonth count
                         ]
 
-                    RedditSubmissionCount submissionCount ->
-                        [ SubmissionCountPerYear <| getContentCountPerYear submissionCount
-                        , SubmissionCountPerMonth <| getContentCountPerMonth submissionCount
+                    RedditSubmissionCount count ->
+                        [ SubmissionCountPerYear <| getContentCountPerYear count
+                        , SubmissionCountPerMonth <| getContentCountPerMonth count
                         ]
 
-                    RedditPostCountPerSubReddit postCountPerSubReddit ->
-                        [ PostCountPerSubReddit <| getContentCountPerSubReddit postCountPerSubReddit ]
+                    RedditCommentCountPerSubReddit count ->
+                        [ CommentCountPerSubReddit <| getContentCountPerSubReddit count ]
 
-                    RedditSubmissionCountPerSubReddit submissionCountPerSubReddit ->
-                        [ SubmissionCountPerSubReddit <| getContentCountPerSubReddit submissionCountPerSubReddit ]
+                    RedditSubmissionCountPerSubReddit count ->
+                        [ SubmissionCountPerSubReddit <| getContentCountPerSubReddit count ]
             )
         |> List.concat
 
@@ -167,11 +167,11 @@ chartConstructor data =
         |> List.map
             (\d ->
                 case d of
-                    PostCountPerYear count ->
-                        makeBarOrLineChart Chart.Bar constructBarChartData count "Posts" (ChartCommon.All Constants.colora2) (ChartCommon.All Constants.color2) "Posts per year"
+                    CommentCountPerYear count ->
+                        makeBarOrLineChart Chart.Bar constructBarChartData count "Comments" (ChartCommon.All Constants.colora2) (ChartCommon.All Constants.color2) "Comments per year"
 
-                    PostCountPerMonth count ->
-                        makeBarOrLineChart Chart.Line constructLineChartData count "Posts" (ChartCommon.All Constants.colora3) (ChartCommon.All Constants.color3) ("Posts per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
+                    CommentCountPerMonth count ->
+                        makeBarOrLineChart Chart.Line constructLineChartData count "Comments" (ChartCommon.All Constants.colora3) (ChartCommon.All Constants.color3) ("Comments per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
 
                     SubmissionCountPerYear count ->
                         makeBarOrLineChart Chart.Bar constructBarChartData count "Submissions" (ChartCommon.All Constants.colora6) (ChartCommon.All Constants.color6) "Submissions per year"
@@ -179,8 +179,8 @@ chartConstructor data =
                     SubmissionCountPerMonth count ->
                         makeBarOrLineChart Chart.Line constructLineChartData count "Submissions" (ChartCommon.All Constants.colora7) (ChartCommon.All Constants.color7) ("Submissions per month (last " ++ String.fromInt Constants.lastNumberOfMonthsForLineGraph ++ ")")
 
-                    PostCountPerSubReddit count ->
-                        makePieChart count Constants.borderColors "Submissions" ("Posts per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
+                    CommentCountPerSubReddit count ->
+                        makePieChart count Constants.borderColors "Submissions" ("Comments per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")
 
                     SubmissionCountPerSubReddit count ->
                         makePieChart count Constants.borderColors "Submissions" ("Submissions per subreddit (Top " ++ String.fromInt Constants.topSubreddits ++ ")")

@@ -1,4 +1,4 @@
-module Codecs exposing (AxisData(..), AxisDataType(..), IntermPostCountPerX, PushShiftData(..), PushShiftPostCount, PushShiftPostCountSubReddit, PushShiftResult(..), SnapshotResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
+module Codecs exposing (AxisData(..), AxisDataType(..), IntermCountPerX, PushShiftCount, PushShiftCountSubReddit, PushShiftData(..), PushShiftResult(..), SnapshotResult(..), User(..), countDecoder, countSubRedditDecoder, deserializeSnapShot, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
 
 import Base64
 import Bytes
@@ -19,10 +19,10 @@ type User
 
 
 type PushShiftData
-    = RedditPostCountPerSubReddit (List PushShiftPostCountSubReddit)
-    | RedditSubmissionCountPerSubReddit (List PushShiftPostCountSubReddit)
-    | RedditPostCount (List PushShiftPostCount)
-    | RedditSubmissionCount (List PushShiftPostCount)
+    = RedditCommentCountPerSubReddit (List PushShiftCountSubReddit)
+    | RedditSubmissionCountPerSubReddit (List PushShiftCountSubReddit)
+    | RedditCommentCount (List PushShiftCount)
+    | RedditSubmissionCount (List PushShiftCount)
 
 
 type PushShiftResult
@@ -38,42 +38,42 @@ type AxisData
 
 
 type AxisDataType
-    = PostCountPerYear AxisData
+    = CommentCountPerYear AxisData
     | SubmissionCountPerYear AxisData
-    | PostCountPerSubReddit AxisData
+    | CommentCountPerSubReddit AxisData
     | SubmissionCountPerSubReddit AxisData
-    | PostCountPerMonth AxisData
+    | CommentCountPerMonth AxisData
     | SubmissionCountPerMonth AxisData
 
 
-type alias PushShiftPostCount =
+type alias PushShiftCount =
     { date : Int
     , count : Int
     }
 
 
-type alias IntermPostCountPerX =
+type alias IntermCountPerX =
     { date : String
     , count : Int
     }
 
 
-type alias PushShiftPostCountSubReddit =
+type alias PushShiftCountSubReddit =
     { subreddit : String
     , count : Int
     }
 
 
-postCountDecoder : Decoder PushShiftPostCount
-postCountDecoder =
-    JsonDecode.map2 PushShiftPostCount
+countDecoder : Decoder PushShiftCount
+countDecoder =
+    JsonDecode.map2 PushShiftCount
         (JsonDecode.field "key" JsonDecode.int)
         (JsonDecode.field "doc_count" JsonDecode.int)
 
 
-postCountSubRedditDecoder : Decoder PushShiftPostCountSubReddit
-postCountSubRedditDecoder =
-    JsonDecode.map2 PushShiftPostCountSubReddit
+countSubRedditDecoder : Decoder PushShiftCountSubReddit
+countSubRedditDecoder =
+    JsonDecode.map2 PushShiftCountSubReddit
         (JsonDecode.field "key" JsonDecode.string)
         (JsonDecode.field "doc_count" JsonDecode.int)
 
@@ -106,10 +106,10 @@ snapshotDataEncoder axisDataList =
         |> List.map
             (\data ->
                 case data of
-                    PostCountPerYear count ->
+                    CommentCountPerYear count ->
                         ( "py", axisDataEncoder count )
 
-                    PostCountPerMonth count ->
+                    CommentCountPerMonth count ->
                         ( "pm", axisDataEncoder count )
 
                     SubmissionCountPerYear count ->
@@ -118,7 +118,7 @@ snapshotDataEncoder axisDataList =
                     SubmissionCountPerMonth count ->
                         ( "sm", axisDataEncoder count )
 
-                    PostCountPerSubReddit count ->
+                    CommentCountPerSubReddit count ->
                         ( "ps", axisDataEncoder count )
 
                     SubmissionCountPerSubReddit count ->
@@ -128,10 +128,10 @@ snapshotDataEncoder axisDataList =
 
 
 type alias IntermediateSnapshotData =
-    { postCountPerSubReddit : AxisData
+    { commentCountPerSubReddit : AxisData
     , submissionCountPerSubReddit : AxisData
-    , postCountPerYear : AxisData
-    , postCountPerMonth : AxisData
+    , commentCountPerYear : AxisData
+    , commentCountPerMonth : AxisData
     , submissionCountPerYear : AxisData
     , submissionCountPerMonth : AxisData
     }
@@ -148,10 +148,10 @@ snapshotDataDecoder =
         (JsonDecode.field "sm" axisDataDecoder)
         |> JsonDecode.map
             (\x ->
-                [ PostCountPerSubReddit x.postCountPerSubReddit
+                [ CommentCountPerSubReddit x.commentCountPerSubReddit
                 , SubmissionCountPerSubReddit x.submissionCountPerSubReddit
-                , PostCountPerYear x.postCountPerYear
-                , PostCountPerMonth x.postCountPerMonth
+                , CommentCountPerYear x.commentCountPerYear
+                , CommentCountPerMonth x.commentCountPerMonth
                 , SubmissionCountPerYear x.submissionCountPerYear
                 , SubmissionCountPerMonth x.submissionCountPerMonth
                 ]

@@ -3,7 +3,7 @@ module Main exposing (main)
 import Browser
 import ChartUtils exposing (chartConstructor, getAggregatedAxisData)
 import Chartjs.Chart as Chart
-import Codecs exposing (AxisData(..), AxisDataType(..), PushShiftData(..), PushShiftResult(..), SnapshotResult(..), User(..), deserializeSnapShot, postCountDecoder, postCountSubRedditDecoder, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
+import Codecs exposing (AxisData(..), AxisDataType(..), PushShiftData(..), PushShiftResult(..), SnapshotResult(..), User(..), countDecoder, countSubRedditDecoder, deserializeSnapShot, pushShiftAggDecoder, serializeSnapShot, snapShotTimeFormatted)
 import Constants
 import Hotkeys exposing (onEnterSend)
 import Html exposing (Html, a, button, div, h1, i, input, p, span, text)
@@ -151,13 +151,13 @@ getRedditStatistics (User user) =
             User (String.replace "/u/" "" user |> String.replace "u/" "")
 
         requests =
-            [ getPushShiftData u SubReddit Comment postCountSubRedditDecoder
-                |> Task.map RedditPostCountPerSubReddit
-            , getPushShiftData u SubReddit Submission postCountSubRedditDecoder
+            [ getPushShiftData u SubReddit Comment countSubRedditDecoder
+                |> Task.map RedditCommentCountPerSubReddit
+            , getPushShiftData u SubReddit Submission countSubRedditDecoder
                 |> Task.map RedditSubmissionCountPerSubReddit
-            , getPushShiftData u CreatedUTC Comment postCountDecoder
-                |> Task.map RedditPostCount
-            , getPushShiftData u CreatedUTC Submission postCountDecoder
+            , getPushShiftData u CreatedUTC Comment countDecoder
+                |> Task.map RedditCommentCount
+            , getPushShiftData u CreatedUTC Submission countDecoder
                 |> Task.map RedditSubmissionCount
             ]
     in
