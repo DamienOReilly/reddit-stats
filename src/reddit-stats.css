@@ -80,6 +80,7 @@
   transform: translateX(-50%) translateY(-50%);
 }
 
+/* From https://projects.lukehaas.me/css-loaders */
 .loader {
     color: #ff717e;
     font-size: 20px;
