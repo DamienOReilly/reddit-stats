@@ -44,7 +44,7 @@ redditUserUrl =
 
 
 githubRepoUrl =
-    "https://github.com/DamienOReilly/reddit-status"
+    "https://github.com/DamienOReilly/reddit-stats"
 
 
 topSubreddits =
